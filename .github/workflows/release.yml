@@ -52,23 +52,38 @@ jobs:
 
       - run: npm ci
 
-      # Code signing certificates are optional. Without them the build still
-      # succeeds and produces an unsigned installer; see README.md for what
-      # that means for the people installing it.
+      # Code signing is optional. The certificate variables must be absent
+      # rather than empty: electron-builder reads an empty CSC_LINK as a path
+      # to a certificate file and fails with "not a file", so they are only
+      # exported when the secrets actually exist.
+      - name: Prepare code signing
+        shell: bash
+        env:
+          SIGN_CERT: ${{ secrets.CSC_LINK }}
+          SIGN_PASS: ${{ secrets.CSC_KEY_PASSWORD }}
+          NOTARY_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASS: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          NOTARY_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$SIGN_CERT" ]; then
+            echo "Signing with the certificate in CSC_LINK."
+            echo "CSC_LINK=$SIGN_CERT"               >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$SIGN_PASS"       >> "$GITHUB_ENV"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=true"  >> "$GITHUB_ENV"
+          else
+            echo "No certificate configured — building unsigned."
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$NOTARY_ID" ]; then
+            echo "APPLE_ID=$NOTARY_ID"                        >> "$GITHUB_ENV"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=$NOTARY_PASS"   >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=$NOTARY_TEAM"                 >> "$GITHUB_ENV"
+          fi
+
       - name: Build and publish
         run: npm run build -- --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Windows and macOS signing (a base64-encoded .pfx or .p12)
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # macOS notarisation. Set mac.notarize to true in package.json once
-          # these three are in place.
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # With no certificate, don't let electron-builder hunt for one.
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
 
       - name: Keep the installers
         uses: actions/upload-artifact@v4
