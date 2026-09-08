@@ -1,0 +1,12 @@
+node_modules/
+
+# Build output
+# dist/    is the single-file build (scripts/build-standalone.js)
+# release/ is the installers (electron-builder)
+dist/
+release/
+
+# Local noise
+*.log
+.DS_Store
+Thumbs.db

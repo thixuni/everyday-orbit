@@ -1,0 +1,6 @@
+# Normalise to LF in the repository so builds on Linux and macOS runners
+# see the same bytes as a Windows checkout.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary

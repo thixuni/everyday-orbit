@@ -1,0 +1,97 @@
+name: Build installers
+
+# Push a version tag (v1.1.0) to cut a release: each platform builds and
+# uploads its installer plus the update metadata electron-updater reads, so
+# installed copies can update themselves.
+#
+# Press "Run workflow" on the Actions tab instead to get installers as
+# downloadable artifacts without publishing anything.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Check the sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Build the standalone file and run the checks
+        run: npm run check
+      - name: Keep the single-file build
+        uses: actions/upload-artifact@v4
+        with:
+          name: everyday-orbit-html
+          path: dist/everyday-orbit.html
+          retention-days: 30
+
+  build:
+    name: Build for ${{ matrix.os }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      # Code signing certificates are optional. Without them the build still
+      # succeeds and produces an unsigned installer; see README.md for what
+      # that means for the people installing it.
+      - name: Build and publish
+        run: npm run build -- --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Windows and macOS signing (a base64-encoded .pfx or .p12)
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # macOS notarisation. Set mac.notarize to true in package.json once
+          # these three are in place.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # With no certificate, don't let electron-builder hunt for one.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
+
+      - name: Keep the installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          retention-days: 30
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.zip
+            release/latest*.yml
+
+  attach-html:
+    name: Attach the single-file build
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: everyday-orbit-html
+          path: html
+      - name: Add it to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: html/everyday-orbit.html
