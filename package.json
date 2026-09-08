@@ -91,7 +91,7 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "dmg": {
-      "title": "Everyday Orbit"
+      "title": "${productName} ${arch}"
     },
     "linux": {
       "target": [
