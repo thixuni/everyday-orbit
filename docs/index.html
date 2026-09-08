@@ -15,7 +15,7 @@
   --ink:#222A24; --ink-2:#495247; --muted:#7D867C; --faint:#9AA298;
   --accent:#3F7D5C; --accent-2:#2E6047; --accent-soft:#E6F1EA; --accent-lift:#5FA37C;
   --on-accent:#FFFFFF;
-  --apricot:#E0854A;
+  --apricot:#E0854A; --apricot-soft:#FBEBDD; --accent-line:#CFE4D8;
   --r-s:9px; --r-m:13px; --r-l:20px;
   --sh-1:0 1px 2px rgba(34,42,36,.06);
   --sh-2:0 8px 24px -12px rgba(34,42,36,.22);
@@ -64,19 +64,19 @@ header{padding:26px 0}
   background:var(--accent-soft);border-left:2px solid var(--accent)}
 .shot-grid div:nth-child(6)::after,.shot-grid div:nth-child(19)::after{
   content:"";position:absolute;left:4px;right:4px;top:34px;height:13px;border-radius:4px;
-  background:#FBEBDD;border-left:2px solid var(--apricot)}
+  background:var(--apricot-soft);border-left:2px solid var(--apricot)}
 
 section{padding:34px 0;border-top:1px solid var(--line)}
 section h2{font-size:22px;margin-bottom:6px}
 section .sub{color:var(--muted);font-size:14px;margin:0 0 22px}
 
-.views{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.views{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:14px}
 .view{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:15px 16px}
 .view h3{font-size:14.5px;display:flex;align-items:center;gap:8px;margin-bottom:5px}
 .view h3 svg{width:16px;height:16px;stroke:var(--accent);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .view p{margin:0;font-size:13.5px;color:var(--ink-2)}
 
-.downloads{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.downloads{display:grid;grid-template-columns:repeat(auto-fit,minmax(198px,1fr));gap:14px}
 .dl{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:16px 17px;display:flex;flex-direction:column;gap:9px}
 .dl h3{font-size:15px}
 .dl p{margin:0;font-size:13px;color:var(--muted);flex:1}
@@ -86,7 +86,7 @@ section .sub{color:var(--muted);font-size:14px;margin:0 0 22px}
   border-radius:var(--r-s);padding:13px 15px;font-size:13.5px;color:var(--ink-2);margin-top:16px}
 .note b{color:var(--ink)}
 
-.privacy{background:var(--accent-soft);border:1px solid #CFE4D8;border-radius:var(--r-m);padding:18px 20px}
+.privacy{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:var(--r-m);padding:18px 20px}
 .privacy h2{font-size:18px;margin-bottom:6px}
 .privacy p{margin:0;font-size:14px;color:var(--ink-2);max-width:64ch}
 
