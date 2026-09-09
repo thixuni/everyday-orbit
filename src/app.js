@@ -382,7 +382,12 @@ function weekGrid(){
     if(s===tstr){const n=new Date(),mins=n.getHours()*60+n.getMinutes();
       if(mins>=H0*60&&mins<=H1*60)now='<div class="nowline" style="top:'+(((mins/60)-H0)*PX).toFixed(1)+'px"></div>';}
     return '<div class="daycol'+(s===tstr?" today":"")+'">'+lines+body+now+'</div>';}).join("");
-  return head+ad+'<div class="grid-scroll" id="gridScroll"><div class="tgrid"><div class="tcol-time">'+hours+'</div>'+cols+'</div></div>';
+  /* The head and the task band live inside the scroller, pinned. Outside it
+     they were laid out over the full width while the grid lost the scrollbar's
+     15px, so the day columns drifted further apart across the week. */
+  return '<div class="grid-scroll" id="gridScroll">'+
+    '<div class="wk-sticky">'+head+ad+'</div>'+
+    '<div class="tgrid"><div class="tcol-time">'+hours+'</div>'+cols+'</div></div>';
 }
 function monthGrid(){
   const first=new Date(V.anchor.getFullYear(),V.anchor.getMonth(),1);

@@ -47,6 +47,16 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .num{font-variant-numeric:tabular-nums}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+/* Scrollbars stay out of the way: a thin muted thumb on no track, darkening
+   only under the pointer. The transparent border with background-clip is what
+   gives the thumb its inset, since a scrollbar thumb takes no padding. */
+*{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line-2);background-clip:content-box;border:3px solid transparent;border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:var(--faint);background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+
 /* ---------- shell ---------- */
 .app{height:100dvh;display:grid;grid-template-columns:252px minmax(0,1fr);background:var(--ground)}
 .rail{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
@@ -158,7 +168,10 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .dcol .dnum{font-family:var(--fd);font-size:19px;font-weight:600;line-height:1.2;margin-top:1px}
 .dcol.today .dow{color:var(--accent)}
 .dcol.today .dnum{width:30px;height:30px;margin:1px auto 0;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-size:16px}
-.allday{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));border-bottom:1px solid var(--line);background:var(--surface-2);max-height:132px;overflow-y:auto}
+/* Scrolls when a week is busy, but with no scrollbar of its own: one here
+   would eat into its width and pull its columns off the grid below. */
+.allday{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));border-bottom:1px solid var(--line);background:var(--surface-2);max-height:132px;overflow-y:auto;scrollbar-width:none}
+.allday::-webkit-scrollbar{display:none}
 .allday .lab{border-right:1px solid var(--line);padding:7px 6px;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);text-align:right;position:sticky;left:0}
 .ad-cell{border-right:1px solid var(--line);padding:5px 5px 7px;display:flex;flex-direction:column;gap:3px;min-height:34px}
 .ad-cell:last-child{border-right:0}
@@ -190,6 +203,9 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .tchip.over{--fill:var(--danger-soft);--fill-hover:color-mix(in srgb,var(--danger) 18%,var(--tint-base));--edge:color-mix(in srgb,var(--danger) 55%,var(--tint-base));--label:color-mix(in srgb,var(--danger) 58%,var(--ink))}
 .tchip.over .ic{color:var(--danger)}
 .grid-scroll{flex:1;overflow-y:auto;min-height:0}
+/* Pinned inside the scroller, so it shares the grid's content width exactly
+   and the day columns cannot drift apart. */
+.wk-sticky{position:sticky;top:0;z-index:6;background:var(--surface)}
 .tgrid{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));position:relative}
 .tcol-time{border-right:1px solid var(--line)}
 .hourlab{height:48px;text-align:right;padding-right:7px;font-size:10.5px;color:var(--faint);font-weight:600;transform:translateY(-7px)}
