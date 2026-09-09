@@ -1,7 +1,7 @@
 # Everyday Orbit
 
 A personal planner: calendar, task board, Eisenhower matrix, routines, notes and
-time tracking. Six views over one set of tasks, sharing one set of categories
+time tracking. Five views over one set of tasks, sharing one set of categories
 that work like calendar layers.
 
 Open any task and a panel slides in from the right with its dates, priority,
@@ -129,7 +129,7 @@ SmartScreen immediately, and costs more); the Apple Developer Programme is
 Give a task an estimate and press **Blitz it**: the timer counts down, and keeps
 counting once it passes zero so overtime is visible rather than hidden. For work
 you cannot estimate, **Stopwatch** counts up instead. Either way each run is
-stored as a session, and the **Time** view breaks those sessions down by day, by
+stored as a session, and the calendar’s **Time** mode breaks those sessions down by day, by
 category and by task, with estimate against actual.
 
 **View ▸ Floating timer** (or the pop-out button on the timer strip) opens a

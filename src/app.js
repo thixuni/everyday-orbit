@@ -243,15 +243,13 @@ const V={view:"calendar",calMode:"week",anchor:today(),taskMode:"board",q:"",odO
 
 /* ============ rail + topbar ============ */
 const NAV=[{id:"calendar",name:"Calendar",icon:"i-calendar"},{id:"tasks",name:"Tasks",icon:"i-board"},
- {id:"matrix",name:"Matrix",icon:"i-grid"},{id:"routines",name:"Routines",icon:"i-repeat"},{id:"notes",name:"Notes",icon:"i-note"},
- {id:"time",name:"Time",icon:"i-chart"}];
+ {id:"matrix",name:"Matrix",icon:"i-grid"},{id:"routines",name:"Routines",icon:"i-repeat"},{id:"notes",name:"Notes",icon:"i-note"}];
 function navCount(id){
   if(id==="calendar"){const o=overdueItems();return o.tasks.length+o.miss.length;}
   if(id==="tasks")return S.tasks.filter(isOpen).length;
   if(id==="matrix")return S.tasks.filter(t=>isOpen(t)&&quadOf(t)==="do").length;
   if(id==="routines")return S.routines.filter(r=>routineOn(r,today())&&!doneR(r,TODAY())).length;
   if(id==="notes")return S.notes.length;
-  if(id==="time")return 0;
   return 0;
 }
 /* On a narrow screen the rail is a drawer over the view; on a wide one the
@@ -279,7 +277,10 @@ function renderTopbar(){
   let title="",sub="",right="";
   if(V.view==="calendar"){
     title="Calendar";
-    sub=V.calMode==="week"?"Week of "+fmtDate(ymd(startOfWeek(V.anchor))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear();
+    if(V.calMode==="time"){
+      const tot=sessionsIn(V.range||"week").reduce((n,x)=>n+x.secs,0);
+      sub=fmtDur(tot)+" tracked · "+((RANGES.find(x=>x.id===(V.range||"week"))||RANGES[0]).name.toLowerCase());
+    }else sub=V.calMode==="week"?"Week of "+fmtDate(ymd(startOfWeek(V.anchor))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear();
     right=topSearch("Search tasks and routines")+'<button class="btn btn-primary" data-act="new-task">'+icon("i-plus")+'New task</button>';
   }else if(V.view==="tasks"){
     title="Tasks";sub=open.length+" open"+(over.length?" · "+over.length+" overdue":"")+" · "+S.tasks.length+" total";
@@ -293,11 +294,7 @@ function renderTopbar(){
     const due=S.routines.filter(r=>routineOn(r,today())).length,done=S.routines.filter(r=>routineOn(r,today())&&doneR(r,TODAY())).length;
     title="Routines & Habits";sub=S.routines.length+" routines · "+done+" of "+due+" done today";
     right=topSearch("Search routines")+'<button class="btn btn-primary" data-act="new-routine">'+icon("i-plus")+'New routine</button>';
-  }else if(V.view==="time"){
-    const tot=sessionsIn(V.range||"week").reduce((n,x)=>n+x.secs,0);
-    title="Time";sub=fmtDur(tot)+" tracked · "+((RANGES.find(x=>x.id===(V.range||"week"))||RANGES[0]).name.toLowerCase());
-    right=topSearch("Search tasks");
-  }else{
+    }else{
     title="Notes";sub=S.notes.length+" notes · action items land in your tasks and calendar";
     right=topSearch("Search notes")+'<button class="btn" data-act="scratch">'+icon("i-bolt")+'Scratch pad</button>'+
       '<button class="btn btn-primary" data-act="new-note">'+icon("i-plus")+'New note</button>';
@@ -427,15 +424,29 @@ function overduePanel(){
   }
   return '<aside class="overdue">'+head+'<div class="od-body">'+body+'</div></aside>';
 }
+/* Week and month show the time you have planned; Time shows where it actually
+   went. All three answer the same question, so they are modes of one view
+   rather than a separate section. */
 function viewCalendar(){
-  const bar='<div class="cal-bar">'+
-    '<div class="stepper"><button data-act="cal-prev" aria-label="Previous">'+icon("i-chev-l")+'</button><button data-act="cal-next" aria-label="Next">'+icon("i-chev-r")+'</button></div>'+
-    '<button class="btn btn-sm" data-act="cal-today">Today</button>'+
-    '<h2>'+(V.calMode==="week"?fmtDate(ymd(startOfWeek(V.anchor)))+" – "+fmtDate(ymd(addDays(startOfWeek(V.anchor),6))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear())+'</h2>'+
-    '<div class="spacer"></div>'+
-    '<div class="seg"><button data-act="cal-mode" data-mode="week" aria-pressed="'+(V.calMode==="week")+'">Week</button>'+
-    '<button data-act="cal-mode" data-mode="month" aria-pressed="'+(V.calMode==="month")+'">Month</button></div></div>';
-  return '<div class="cal-wrap"><div class="cal-main">'+bar+(V.calMode==="week"?weekGrid():monthGrid())+'</div>'+overduePanel()+'</div>';
+  const mode=V.calMode||"week",isTime=mode==="time";
+  const modes='<div class="seg">'+
+    '<button data-act="cal-mode" data-mode="week" aria-pressed="'+(mode==="week")+'">Week</button>'+
+    '<button data-act="cal-mode" data-mode="month" aria-pressed="'+(mode==="month")+'">Month</button>'+
+    '<button data-act="cal-mode" data-mode="time" aria-pressed="'+isTime+'">'+icon("i-chart","ic-14")+'Time</button></div>';
+
+  const bar='<div class="cal-bar">'+(isTime
+    ? '<h2>Where the time went</h2><div class="spacer"></div>'+
+      '<div class="seg an-range">'+RANGES.map(x=>'<button data-act="an-range" data-v="'+x.id+'" aria-pressed="'+((V.range||"week")===x.id)+'">'+esc(x.name)+'</button>').join("")+'</div>'
+    : '<div class="stepper"><button data-act="cal-prev" aria-label="Previous">'+icon("i-chev-l")+'</button><button data-act="cal-next" aria-label="Next">'+icon("i-chev-r")+'</button></div>'+
+      '<button class="btn btn-sm" data-act="cal-today">Today</button>'+
+      '<h2>'+(mode==="week"?fmtDate(ymd(startOfWeek(V.anchor)))+" – "+fmtDate(ymd(addDays(startOfWeek(V.anchor),6))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear())+'</h2>'+
+      '<div class="spacer"></div>')+
+    modes+'</div>';
+
+  const body=isTime?viewTime():mode==="week"?weekGrid():monthGrid();
+  /* The catch-up panel is about what is outstanding, which has nothing to say
+     on a page about hours already spent. */
+  return '<div class="cal-wrap"><div class="cal-main">'+bar+body+'</div>'+(isTime?"":overduePanel())+'</div>';
 }
 
 /* ============ tasks: filters ============ */
@@ -911,7 +922,6 @@ function renderView(){
   else if(V.view==="tasks")vp.innerHTML=V.taskMode==="board"?viewBoard():viewList();
   else if(V.view==="matrix")vp.innerHTML=viewMatrix();
   else if(V.view==="routines")vp.innerHTML=viewRoutines();
-  else if(V.view==="time")vp.innerHTML=viewTime();
   else vp.innerHTML=viewNotes();
   const gs=el("gridScroll");if(gs)gs.scrollTop=Math.max(0,(7-H0)*PX-8);
 }
@@ -1895,9 +1905,7 @@ function viewTime(){
           '<span class="ssecs num">'+fmtDur(s.secs)+'</span></div>';}).join("")+'</div>'
       :'<p class="mnone">No sessions yet. Start a timer from any task.</p>')+'</div>';
 
-  return '<div class="an">'+
-    '<div class="seg an-range">'+RANGES.map(x=>'<button data-act="an-range" data-v="'+x.id+'" aria-pressed="'+(r===x.id)+'">'+esc(x.name)+'</button>').join("")+'</div>'+
-    tiles+dayChart+'<div class="an-two">'+catCard+taskCard+'</div>'+log+'</div>';
+  return '<div class="an">'+tiles+dayChart+'<div class="an-two">'+catCard+taskCard+'</div>'+log+'</div>';
 }
 
 

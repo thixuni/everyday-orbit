@@ -63,7 +63,7 @@ Rendering is full innerHTML replacement, no virtual DOM:
   the search box keeps focus.
 
 Each view is a function returning an HTML string: `viewCalendar`, `viewBoard`,
-`viewList`, `viewMatrix`, `viewRoutines`, `viewNotes`, `viewTime`.
+`viewList`, `viewMatrix`, `viewRoutines`, `viewNotes`.
 
 The task detail panel is a **second root**, `#sheetRoot`, drawn by
 `renderSheet()`. `render()` deliberately does not touch it, because a redraw
@@ -94,6 +94,11 @@ Documents are markdown in `S.docs`. On the desktop each one is mirrored into
 right document. The loop is broken on both sides: the main process ignores
 file events for two seconds after its own write, and `applyVaultChange()`
 never writes back to the vault.
+
+Time is a mode of the calendar (`V.calMode === "time"`), not a section of its
+own — week and month show planned time, Time shows where it went, so they sit
+behind one nav item. `viewCalendar()` picks the body and hides the catch-up
+panel there.
 
 Time tracking stores one `S.sessions` row per run. A task total is always
 summed from those rows, never cached on the task. The timer in flight lives in
