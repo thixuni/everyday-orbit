@@ -29,6 +29,23 @@ function fail(what, fix) {
   process.exit(1);
 }
 
+/* Written here rather than by `npm version`, which on Windows cannot be run
+   without a shell. The lock file carries the number in two places. */
+function setVersion(v) {
+  const pkgFile = path.join(root, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+  pkg.version = v;
+  fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
+
+  const lockFile = path.join(root, 'package-lock.json');
+  if (fs.existsSync(lockFile)) {
+    const lock = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+    lock.version = v;
+    if (lock.packages && lock.packages['']) lock.packages[''].version = v;
+    fs.writeFileSync(lockFile, JSON.stringify(lock, null, 2) + '\n');
+  }
+}
+
 const kind = (process.argv[2] || '').toLowerCase();
 if (kind !== 'patch' && kind !== 'minor' && kind !== 'same') {
   fail('say which kind of release this is.',
@@ -55,11 +72,12 @@ if (behind !== '0') {
 }
 step('up to date with origin');
 
-// Never ship something the checks have not seen.
+// Never ship something the checks have not seen. Node itself runs both, rather
+// than shelling out to npm: on Windows execFile refuses a .cmd without a shell.
 console.log('\nRunning the checks');
 try {
   execFileSync(process.execPath, [path.join(root, 'scripts', 'build-standalone.js')], { cwd: root, stdio: 'inherit' });
-  execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test'], { cwd: root, stdio: 'inherit' });
+  execFileSync(process.execPath, ['--test'], { cwd: root, stdio: 'inherit' });
 } catch (e) {
   fail('the checks did not pass.', 'Fix them and run this again; nothing has been changed.');
 }
@@ -79,8 +97,7 @@ console.log(kind === 'same'
   ? '\nReleasing ' + to + ' as it stands'
   : '\nReleasing ' + from + ' -> ' + to + ' (' + kind + ')');
 
-run(process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['version', to, '--no-git-tag-version', '--allow-same-version']);
+setVersion(to);
 step('version set to ' + to);
 
 run('git', ['add', 'package.json', 'package-lock.json']);
