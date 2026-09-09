@@ -4,6 +4,9 @@
  *
  *   npm run release patch   1.0.0 -> 1.0.1   ordinary work
  *   npm run release minor   1.0.0 -> 1.1.0   a major change
+ *   npm run release same    1.0.0 -> 1.0.0   publish the version as it stands,
+ *                                            for the first release and for
+ *                                            retrying one that failed part way
  *
  * The version number moves here and nowhere else, so every number that
  * exists is one somebody can download and the releases page has no gaps.
@@ -27,9 +30,11 @@ function fail(what, fix) {
 }
 
 const kind = (process.argv[2] || '').toLowerCase();
-if (kind !== 'patch' && kind !== 'minor') {
+if (kind !== 'patch' && kind !== 'minor' && kind !== 'same') {
   fail('say which kind of release this is.',
-    'npm run release patch   (ordinary work)\n  npm run release minor   (a major change)');
+    'npm run release patch   (ordinary work)\n' +
+    '  npm run release minor   (a major change)\n' +
+    '  npm run release same    (publish the current version unchanged)');
 }
 
 console.log('\nChecking the repository');
@@ -62,20 +67,25 @@ try {
 const pkgPath = path.join(root, 'package.json');
 const from = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version;
 const [maj, min, pat] = from.split('.').map(Number);
-const to = kind === 'minor' ? [maj, min + 1, 0].join('.') : [maj, min, pat + 1].join('.');
+const to = kind === 'same'  ? from
+         : kind === 'minor' ? [maj, min + 1, 0].join('.')
+         : [maj, min, pat + 1].join('.');
 const tag = 'v' + to;
 
 const existing = run('git', ['tag', '-l', tag]);
 if (existing) fail(tag + ' already exists.', 'Delete it first, or pick a different kind of release.');
 
-console.log('\nReleasing ' + from + ' -> ' + to + ' (' + kind + ')');
+console.log(kind === 'same'
+  ? '\nReleasing ' + to + ' as it stands'
+  : '\nReleasing ' + from + ' -> ' + to + ' (' + kind + ')');
 
 run(process.platform === 'win32' ? 'npm.cmd' : 'npm',
     ['version', to, '--no-git-tag-version', '--allow-same-version']);
 step('version set to ' + to);
 
 run('git', ['add', 'package.json', 'package-lock.json']);
-run('git', ['commit', '-m', 'Release ' + tag]);
+// With `same` the version did not move, so there may be nothing to commit.
+if (run('git', ['status', '--porcelain'])) run('git', ['commit', '-m', 'Release ' + tag]);
 run('git', ['tag', '-a', tag, '-m', 'Everyday Orbit ' + to]);
 step('committed and tagged');
 
