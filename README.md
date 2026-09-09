@@ -126,15 +126,18 @@ SmartScreen immediately, and costs more); the Apple Developer Programme is
 
 ## Time tracking
 
-Give a task an estimate and press **Blitz it**: the timer counts down, and keeps
-counting once it passes zero so overtime is visible rather than hidden. For work
-you cannot estimate, **Stopwatch** counts up instead. Either way each run is
+Give a task an estimate and press **Start**. The timer counts up against that
+estimate — "12:30 of 45m", with a bar that fills and turns red once you pass it
+— so being over or under is plain at a glance. No estimate is fine too; it just
+counts. Hover the total anywhere to see the individual sessions behind it. Either way each run is
 stored as a session, and each run is drawn straight onto the calendar, at the hour it happened and as
 long as it lasted, so planned and actual time sit side by side
 
 **View ▸ Floating timer** (or the pop-out button on the timer strip) opens a
 small always-on-top window that stays above other apps while you work, with
-pause and stop on it. That window is desktop only — a browser tab cannot float
+pause, stop and a button that jumps back to the task. Closing the planner
+window leaves the app running so the timer keeps going; the icon by the clock
+reopens it, and quits it for real. That window is desktop only — a browser tab cannot float
 above anything else.
 
 ## Documents and Obsidian

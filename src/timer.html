@@ -65,11 +65,14 @@ svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke
   </div>
   <div id="live" hidden>
     <div class="clock" id="clock">0:00</div>
-    <div class="mode" id="mode">Blitz</div>
+    <div class="mode" id="mode">of 45m</div>
     <div class="bar" id="bar"><i id="fill"></i></div>
     <div class="row">
       <button class="act go" id="toggle"><svg viewBox="0 0 24 24" id="ticon"><path d="M9 5.5v13M15 5.5v13"/></svg><span id="tlabel">Pause</span></button>
       <button class="act stop" id="stop"><svg viewBox="0 0 24 24"><rect x="6.2" y="6.2" width="11.6" height="11.6" rx="2"/></svg>Stop</button>
+      <button class="act" id="open" title="Open the task">
+        <svg viewBox="0 0 24 24"><path d="M14 4.4h5.6V10M19.2 4.8 12 12"/><path d="M18.4 14v5A1.6 1.6 0 0 1 16.8 20.6H5.4A1.6 1.6 0 0 1 3.8 19V7.6A1.6 1.6 0 0 1 5.4 6h5"/></svg>
+      </button>
     </div>
   </div>
   <div class="idle" id="idle">Start a timer on a task and it will show up here.</div>
@@ -89,6 +92,11 @@ svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke
     return (h ? h+":"+p(m) : m) + ":" + p(ss);
   }
 
+  function mins(s){
+    var m = Math.round(s/60), h = Math.floor(m/60), mm = m%60;
+    return (h ? h+"h" : "") + (h && mm ? " " : "") + (mm || !h ? mm+"m" : "");
+  }
+
   function paint(){
     var live = state.state === "running" || state.state === "paused";
     el("live").hidden = !live;
@@ -103,14 +111,13 @@ svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke
     el("dot").style.background = state.colour || "#3F7D5C";
 
     var secs = state.secs || 0, est = state.est || 0;
-    var counting = state.mode === "countdown" && est > 0;
-    var shown = counting ? Math.abs(est - secs) : secs;
-    el("clock").textContent = (state.over ? "+" : "") + fmt(shown);
+    el("clock").textContent = fmt(secs);
     el("clock").classList.toggle("over", !!state.over);
     el("bar").classList.toggle("over", !!state.over);
     el("mode").textContent = state.state === "paused" ? "Paused"
-      : (counting ? (state.over ? "Overtime" : "Blitz") : "Stopwatch");
-    el("fill").style.width = counting ? Math.min(100, secs/est*100).toFixed(1)+"%" : "100%";
+      : est ? (state.over ? fmt(secs-est) + " over " + mins(est) : "of " + mins(est))
+            : "No estimate";
+    el("fill").style.width = est ? Math.min(100, secs/est*100).toFixed(1)+"%" : "0%";
 
     var run = state.state === "running";
     el("tlabel").textContent = run ? "Pause" : "Resume";
@@ -125,6 +132,7 @@ svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke
   el("toggle").addEventListener("click", function(){ send("toggle"); });
   el("stop").addEventListener("click", function(){ send("stop"); });
   el("hide").addEventListener("click", function(){ send("hide"); });
+  el("open").addEventListener("click", function(){ send("open"); });
   paint();
 })();
 </script>

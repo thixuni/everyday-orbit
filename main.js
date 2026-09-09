@@ -1,4 +1,4 @@
-const {app, BrowserWindow, Menu, shell, dialog, ipcMain, screen} = require('electron');
+const {app, BrowserWindow, Menu, Tray, shell, dialog, ipcMain, screen} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const KEY = 'everyday-orbit-v1';
@@ -8,6 +8,8 @@ let timerWin = null;         // the floating timer
 let updater = null;          // lazily required; absent in dev
 let updateCheckIsManual = false;
 let lastTimerState = {state: 'idle'};
+let tray = null;             // lives by the clock so the app can outlive its window
+let quitting = false;        // true only once the user has actually asked to quit
 
 /* ---------------------------------------------------------------- settings
  * The renderer keeps its own copy of the vault path for display, but the main
@@ -46,8 +48,48 @@ function createWindow(){
     if(/^https?:/i.test(url)) shell.openExternal(url);
     return {action: 'deny'};
   });
-  win.on('closed', () => { win = null; closeTimerWindow(); });
+  /* Closing the window puts the planner away rather than quitting it: a timer
+     you started should not disappear because you tidied the window off screen.
+     Quit properly from the tray or the File menu. */
+  win.on('close', e => {
+    if(quitting) return;
+    e.preventDefault();
+    win.hide();
+  });
+  win.on('closed', () => { win = null; });
   win.webContents.on('did-finish-load', () => startWatching(readSettings().vault));
+}
+
+/* Bring the planner back, wherever it was left. */
+function showPlanner(){
+  if(!win || win.isDestroyed()){ createWindow(); return; }
+  if(win.isMinimized()) win.restore();
+  if(!win.isVisible()) win.show();
+  win.focus();
+}
+
+/* ------------------------------------------------------------------- tray */
+/* The app outlives its window so a timer can keep running while the planner
+   is out of the way. The tray icon is the only way back, and the only way to
+   quit for real. */
+function buildTray(){
+  if(tray) return tray;
+  try{ tray = new Tray(iconPath()); }catch(e){ tray = null; return null; }
+  tray.setToolTip("Everyday Orbit");
+  const refresh = () => {
+    const live = lastTimerState && lastTimerState.state !== "idle";
+    tray.setContextMenu(Menu.buildFromTemplate([
+      {label: "Open Everyday Orbit", click: showPlanner},
+      {label: live ? "Show the timer" : "Show the timer (nothing running)",
+       enabled: !!live, click: () => { const w = createTimerWindow(); if(!w.isDestroyed() && !w.isVisible()) w.showInactive(); }},
+      {type: "separator"},
+      {label: "Quit", click: () => { quitting = true; app.quit(); }}
+    ]));
+  };
+  refresh();
+  tray.on("click", showPlanner);
+  tray.refresh = refresh;
+  return tray;
 }
 
 /* --------------------------------------------------------- floating timer */
@@ -95,10 +137,12 @@ ipcMain.on('timer:state', (e, payload) => {
   /* Two directions share this channel: a command carries `cmd`, state does not. */
   if(payload && payload.cmd){
     if(payload.cmd === 'hide'){ closeTimerWindow(); return; }
+    if(payload.cmd === 'open'){ showPlanner(); }
     if(win && !win.isDestroyed()) win.webContents.send('timer:cmd', payload);
     return;
   }
   lastTimerState = payload || {state: 'idle'};
+  if(tray && tray.refresh) tray.refresh();
   if(timerWin && !timerWin.isDestroyed()) timerWin.webContents.send('timer:cmd', lastTimerState);
   /* A timer that stops closes the window with it. */
   if(lastTimerState.state === 'idle') closeTimerWindow();
@@ -382,7 +426,10 @@ function buildMenu(){
           detail: 'Open Settings in the planner and choose your Obsidian vault.'});
       }},
       {type: 'separator'},
-      isMac ? {role: 'close'} : {role: 'quit'}
+      {label: isMac ? 'Close window' : 'Hide to the tray', accelerator: 'CmdOrCtrl+W',
+       click: () => { if(win && !win.isDestroyed()) win.hide(); }},
+      {label: 'Quit Everyday Orbit', accelerator: 'CmdOrCtrl+Q',
+       click: () => { quitting = true; app.quit(); }}
     ]},
     {label: 'Edit', submenu: [
       {role: 'undo'}, {role: 'redo'}, {type: 'separator'},
@@ -411,18 +458,20 @@ if(!app.requestSingleInstanceLock()){
   app.quit();
 }else{
   app.on('second-instance', () => {
-    if(win){ if(win.isMinimized()) win.restore(); win.focus(); }
+    showPlanner();
   });
+  app.on('before-quit', () => { quitting = true; });
   app.whenReady().then(() => {
     buildMenu();
+    buildTray();
     createWindow();
     initUpdater();
     app.on('activate', () => {
       if(BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   });
-  app.on('window-all-closed', () => {
-    stopWatching();
-    if(process.platform !== 'darwin') app.quit();
-  });
+  /* Deliberately does not quit: the planner window closing is not the app
+     ending, or a timer would stop the moment the window was tidied away. */
+  app.on('window-all-closed', () => {});
+  app.on('quit', stopWatching);
 }

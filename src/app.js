@@ -1106,11 +1106,12 @@ document.addEventListener("click",function(e){
       if(f&&f.path)o.openFile(f.path);break;}
     case "sh-file-del":{const t=sheetTask();if(!t)break;
       patchCurrent({attachments:tFiles(t).filter(f=>f.id!==n.dataset.v)});break;}
-    case "sh-timer":{const t=sheetTask();if(t&&V.sheet.id)toggleTimer(t.id,n.dataset.mode);break;}
+    case "sh-timer":{const t=sheetTask();if(t&&V.sheet.id)toggleTimer(t.id);break;}
 
     /* ---- timer ---- */
     case "timer-toggle":toggleTimer(id||(running()||{}).task);break;
     case "timer-stop":stopTimer();break;
+    case "done-after-timer":closeModal();toggleTaskDone(id);renderSheet();break;
     case "timer-pop":popOutTimer();break;
 
     /* ---- comments and documents ---- */
@@ -1397,13 +1398,13 @@ function liveSecs(){
   const r=running();if(!r)return 0;
   return (r.acc||0)+(r.since?Math.floor((Date.now()-r.since)/1000):0);
 }
-function startTimer(taskId,mode){
+function startTimer(taskId){
   const r=running();
   if(r&&r.task!==taskId)stopTimer();          // one task at a time
   const cur=running();
   S.prefs.running=cur&&cur.task===taskId
     ? Object.assign({},cur,{since:Date.now()})
-    : {task:taskId,mode:mode||"countdown",acc:0,since:Date.now(),began:Date.now()};
+    : {task:taskId,acc:0,since:Date.now(),began:Date.now()};
   save("prefs");syncTimerWindow();render();renderSheet();
 }
 function pauseTimer(){
@@ -1416,16 +1417,38 @@ function stopTimer(){
   const secs=liveSecs();
   S.prefs.running=null;
   if(secs>=5){                                 // a five second run is a misclick, not work
-    S.sessions.push({id:uid("s"),task:r.task,mode:r.mode,start:r.began,end:Date.now(),secs:secs});
+    S.sessions.push({id:uid("s"),task:r.task,start:r.began,end:Date.now(),secs:secs});
     save("sessions");
-    logAct(r.task,"time","Tracked "+fmtDur(secs),{secs:secs,mode:r.mode});
+    logAct(r.task,"time","Tracked "+fmtDur(secs),{secs:secs});
   }
   save("prefs");syncTimerWindow();render();renderSheet();
+  if(secs>=5)askIfDone(r.task,secs);
 }
-function toggleTimer(taskId,mode){
+
+/* Stopping usually means finishing, but not always, so it is offered rather
+   than assumed. */
+function askIfDone(taskId,secs){
+  const t=taskById(taskId);
+  if(!t||t.status==="completed")return;
+  const est=tEst(t)*60,total=trackedSecs(taskId);
+  const verdict=est?(total>est?"That is "+fmtDur(total-est)+" over your "+fmtMins(est/60)+" estimate."
+                             :"That is inside your "+fmtMins(est/60)+" estimate, with "+fmtDur(est-total)+" to spare.")
+                  :"";
+  openModal('<div class="modal modal-sm" role="dialog" aria-modal="true" aria-label="Finished?">'+
+    '<div class="mbody">'+
+      '<h2 style="font-size:17px;margin-bottom:6px">Logged '+esc(fmtDur(secs))+' on “'+esc(t.title)+'”</h2>'+
+      '<p class="mnone" style="margin:0">'+esc(verdict||"Nothing was estimated for this one.")+'</p>'+
+    '</div>'+
+    '<div class="mfoot"><div class="spacer" style="flex:1"></div>'+
+      '<button class="btn" data-act="close">Not yet</button>'+
+      '<button class="btn btn-primary" data-act="done-after-timer" data-id="'+taskId+'">'+icon("i-check")+'Mark complete</button>'+
+    '</div></div>');
+}
+
+function toggleTimer(taskId){
   const r=running();
   if(r&&r.task===taskId&&r.since)pauseTimer();
-  else startTimer(taskId,mode);
+  else startTimer(taskId);
 }
 
 /* The strip that sits in the top bar whenever a timer exists. */
@@ -1433,12 +1456,11 @@ function timerBar(){
   const r=running();if(!r)return "";
   const t=taskById(r.task);if(!t)return "";
   const c=cat(t.cat),secs=liveSecs(),est=tEst(t)*60;
-  const over=r.mode==="countdown"&&est&&secs>est;
-  const shown=r.mode==="countdown"&&est?Math.abs(est-secs):secs;
+  const over=est&&secs>est;
   return '<div class="tbar'+(over?" over":"")+(r.since?"":" held")+'" style="--c:'+c.color+'">'+
     '<button class="tbar-btn" data-act="timer-toggle" data-id="'+t.id+'" aria-label="'+(r.since?"Pause":"Resume")+'">'+icon(r.since?"i-pause":"i-play","ic-14")+'</button>'+
     '<span class="tbar-name">'+esc(t.title)+'</span>'+
-    '<span class="tbar-time num">'+(over?"+":"")+fmtDur(shown)+'</span>'+
+    '<span class="tbar-time num">'+fmtDur(secs)+(est?'<em> of '+esc(fmtMins(est/60))+'</em>':"")+'</span>'+
     '<button class="tbar-btn" data-act="timer-stop" aria-label="Stop and log">'+icon("i-stop","ic-14")+'</button>'+
     '<button class="tbar-btn" data-act="timer-pop" aria-label="Pop out the timer" title="Pop out">'+icon("i-pop","ic-14")+'</button>'+
     '</div>';
@@ -1594,19 +1616,33 @@ function sheetPrio(t){
 
 function sheetTime(t,isNew){
   if(isNew)return '<span class="mnone">Available once the task exists</span>';
-  const r=running(),live=r&&r.task===t.id,secs=trackedSecs(t.id)+(live?liveSecs():0);
-  const est=tEst(t);
+  const r=running(),live=r&&r.task===t.id,going=live&&r.since;
+  const secs=trackedSecs(t.id)+(live?liveSecs():0);
+  const est=tEst(t),estSecs=est*60;
+  const over=estSecs&&secs>estSecs;
+
+  /* Hovering the total shows what it is made of, rather than needing a page. */
+  const ss=sessionsFor(t.id);
+  const tip=ss.length
+    ? ss.map(x=>{const d=new Date(x.start);
+        return fmtDate(ymd(d))+" · "+fmtTime(pad(d.getHours())+":"+pad(d.getMinutes()))+" · "+fmtDur(x.secs);})
+        .join("\n")+(ss.length>1?"\n"+ss.length+" sessions":"")
+    : "No time tracked yet";
+
   return '<div class="tm">'+
     '<div class="tm-controls">'+
-      '<button class="btn btn-sm'+(live&&r.since?" btn-primary":"")+'" data-act="sh-timer" data-mode="countdown">'+
-        icon(live&&r.since?"i-pause":"i-play","ic-14")+(live&&r.since?"Pause":(est?"Blitz it":"Start"))+'</button>'+
-      '<button class="btn btn-sm" data-act="sh-timer" data-mode="stopwatch" title="Count up instead">'+icon("i-timer","ic-14")+'Stopwatch</button>'+
+      '<button class="btn btn-sm'+(going?"":" btn-primary")+'" data-act="sh-timer">'+
+        icon(going?"i-pause":"i-play","ic-14")+(going?"Pause":live?"Resume":"Start")+'</button>'+
       (live?'<button class="btn btn-sm btn-danger" data-act="timer-stop">'+icon("i-stop","ic-14")+'Stop</button>':"")+
     '</div>'+
     '<div class="tm-read">'+
-      '<span class="num"><b>'+fmtDur(secs)+'</b> tracked</span>'+
-      (est?'<span class="num'+(secs>est*60?" over":"")+'">'+fmtMins(est)+' estimated'+(secs>est*60?" · over by "+fmtDur(secs-est*60):"")+'</span>':"")+
-    '</div></div>';
+      '<span class="num tm-total" title="'+esc(tip)+'"><b>'+fmtDur(secs)+'</b>'+(estSecs?' of '+fmtMins(est):' tracked')+'</span>'+
+      (estSecs?'<span class="tm-delta'+(over?" over":"")+'">'+
+        (over?"over by "+fmtDur(secs-estSecs):fmtDur(estSecs-secs)+" left")+'</span>':"")+
+    '</div>'+
+    (estSecs?'<div class="tm-bar'+(over?" over":"")+'"><i style="width:'+
+      Math.min(100,secs/estSecs*100).toFixed(1)+'%"></i></div>':"")+
+    '</div>';
 }
 
 function sheetTags(t){
@@ -1741,7 +1777,7 @@ function renderSheet(){
       '<select class="inp inp-sm sh-status" data-act="sh-set" data-k="status">'+
         STATUSES.map(x=>'<option value="'+x.id+'"'+(t.status===x.id?" selected":"")+'>'+esc(x.name)+'</option>').join("")+'</select>'+
       '<div class="spacer" style="flex:1"></div>'+
-      (isNew?"":'<button class="icon-btn btn-sm" data-act="sh-timer" data-mode="countdown" title="Start the timer" aria-label="Start the timer">'+icon(running()&&running().task===t.id&&running().since?"i-pause":"i-play","ic-14")+'</button>')+
+      (isNew?"":'<button class="icon-btn btn-sm" data-act="sh-timer" title="Start the timer" aria-label="Start the timer">'+icon(running()&&running().task===t.id&&running().since?"i-pause":"i-play","ic-14")+'</button>')+
       (isNew?"":'<button class="icon-btn btn-sm btn-danger" data-act="sh-delete" title="Delete" aria-label="Delete task">'+icon("i-trash","ic-14")+'</button>')+
       '<button class="icon-btn btn-sm" data-act="sheet-close" aria-label="Close">'+icon("i-x","ic-14")+'</button>';
 
@@ -1839,8 +1875,8 @@ function syncTimerWindow(){
   if(!r){try{o.timer({state:"idle"});}catch(e){}return;}
   const t=taskById(r.task);if(!t)return;
   const est=tEst(t)*60,secs=liveSecs();
-  try{o.timer({state:r.since?"running":"paused",title:t.title,mode:r.mode,
-    secs:secs,est:est,colour:cat(t.cat).color,over:r.mode==="countdown"&&est>0&&secs>est});}catch(e){}
+  try{o.timer({state:r.since?"running":"paused",title:t.title,task:t.id,
+    secs:secs,est:est,colour:cat(t.cat).color,over:est>0&&secs>est});}catch(e){}
 }
 
 /* ============ time analytics ============ */
@@ -1880,6 +1916,7 @@ function applyVaultChange(d){
     const r=running();
     if(d.cmd==="toggle"&&r)toggleTimer(r.task);
     else if(d.cmd==="stop")stopTimer();
+    else if(d.cmd==="open"&&r){V.view="tasks";openSheet(r.task);render();}
   });
   if(o.onVaultChange)o.onVaultChange(applyVaultChange);
   /* Keep the shell in step with the path the planner remembers. */
@@ -1898,15 +1935,23 @@ setInterval(function(){
   const r=running();
   if(!r||!r.since)return;
   const t=taskById(r.task);if(!t)return;
-  const secs=liveSecs(),est=tEst(t)*60;
-  const over=r.mode==="countdown"&&est&&secs>est;
+  const secs=liveSecs(),est=tEst(t)*60,over=est&&secs>est;
   const bar=document.querySelector(".tbar-time");
   if(bar){
-    bar.textContent=(over?"+":"")+fmtDur(r.mode==="countdown"&&est?Math.abs(est-secs):secs);
+    bar.innerHTML=esc(fmtDur(secs))+(est?"<em> of "+esc(fmtMins(est/60))+"</em>":"");
     const wrap=bar.closest(".tbar");if(wrap)wrap.classList.toggle("over",!!over);
   }
-  const read=document.querySelector(".tm-read b");
-  if(read&&V.sheet&&V.sheet.id===r.task)read.textContent=fmtDur(trackedSecs(r.task)+secs);
+  /* Keep the panel readout live without redrawing it and losing the caret. */
+  if(V.sheet&&V.sheet.id===r.task){
+    const total=trackedSecs(r.task)+secs;
+    const b=document.querySelector(".tm-total b");if(b)b.textContent=fmtDur(total);
+    const d=document.querySelector(".tm-delta");
+    if(d&&est){d.textContent=total>est?"over by "+fmtDur(total-est):fmtDur(est-total)+" left";
+      d.classList.toggle("over",total>est);}
+    const fill=document.querySelector(".tm-bar i");
+    if(fill&&est){fill.style.width=Math.min(100,total/est*100).toFixed(1)+"%";
+      fill.parentNode.classList.toggle("over",total>est);}
+  }
   syncTimerWindow();
 },1000);
 

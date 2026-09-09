@@ -101,6 +101,16 @@ grid lays them out side by side. A session block is its true length — routines
 keep a 20px floor so their label stays legible, sessions do not, because a
 block that claims a duration has to be that duration.
 
+Time tracking has one control, Start, and no modes. A run counts up; if the
+task has an estimate the readouts say "elapsed of estimate" and turn red past
+it, and with no estimate they simply count. Stopping asks whether the task is
+done rather than deciding.
+
+The app keeps running when its window closes — a timer must survive the window
+being tidied away — so `window-all-closed` deliberately does not quit and the
+tray is the only way out. Anything that should really quit sets `quitting`
+first, or the close handler will just hide the window again.
+
 Time tracking stores one `S.sessions` row per run. A task total is always
 summed from those rows, never cached on the task. The timer in flight lives in
 `prefs.running` so it survives a reload, and it is paused rather than resumed
