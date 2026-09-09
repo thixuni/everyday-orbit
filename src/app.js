@@ -1041,6 +1041,9 @@ document.addEventListener("click",function(e){
     case "sh-link-del":{const t=sheetTask();if(!t)break;
       patchCurrent({links:tLinks(t).filter(x=>x!==n.dataset.v)});break;}
     case "sh-file-add":pickAttachment();break;
+    case "sh-file-open":{const t=sheetTask(),o=desktop();if(!t||!o||!o.openFile)break;
+      const f=tFiles(t).find(x=>x.id===n.dataset.v);
+      if(f&&f.path)o.openFile(f.path);break;}
     case "sh-file-del":{const t=sheetTask();if(!t)break;
       patchCurrent({attachments:tFiles(t).filter(f=>f.id!==n.dataset.v)});break;}
     case "sh-timer":{const t=sheetTask();if(t&&V.sheet.id)toggleTimer(t.id,n.dataset.mode);break;}
@@ -1548,7 +1551,9 @@ function sheetFiles(t,isNew){
   if(isNew)return '<span class="mnone">Available once the task exists</span>';
   const files=tFiles(t);
   return '<div class="filebox">'+
-    files.map(f=>'<div class="filerow">'+icon("i-clip","ic-14")+'<span class="fname">'+esc(f.name)+'</span>'+
+    files.map(f=>'<div class="filerow">'+icon("i-clip","ic-14")+
+      (f.path?'<button class="fname lk-inline" data-act="sh-file-open" data-v="'+esc(f.id)+'" title="Open">'+esc(f.name)+'</button>'
+             :'<span class="fname">'+esc(f.name)+'</span>')+
       '<span class="fsize num">'+esc(f.size)+'</span>'+
       '<button class="rowx" data-act="sh-file-del" data-v="'+f.id+'" aria-label="Remove">'+icon("i-x","ic-14")+'</button></div>').join("")+
     (hasDesktop()

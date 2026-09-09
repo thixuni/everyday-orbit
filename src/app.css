@@ -484,7 +484,7 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .rowx{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;color:var(--faint);flex:none}
 .rowx:hover{background:var(--danger-soft);color:var(--danger)}
 .filerow .ic{color:var(--faint)}
-.fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .fsize{color:var(--faint);font-size:11px;flex:none}
 
 .sh-sec{margin-bottom:18px}
