@@ -5,8 +5,10 @@ A personal planner desktop app. Electron shell around a single-page web app.
 ## Layout
 
 ```
-main.js            Electron main process: window, menu, backup/restore, updates
+main.js            Electron main process: windows, menu, vault sync, updates
+preload.js         The only bridge to the shell; exposes window.orbit
 src/index.html     Page shell, SVG icon sprite, app markup
+src/timer.html     The floating timer window (desktop only)
 src/app.css        Every style; all colours are tokens on :root
 src/app.js         The whole application, in one IIFE
 scripts/           build-standalone.js, serve.js
@@ -40,10 +42,11 @@ npm run build        # produce installers into release/
 A single module-level object `S` holds all data:
 
 ```js
-S = { categories, tasks, routines, notes, completions, prefs }
+S = { categories, tasks, routines, notes, completions, prefs,
+      activity, docs, sessions }
 ```
 
-`KEYS` lists those six names. Anything that changes data must call
+`KEYS` lists those nine names. Anything that changes data must call
 `save("<key>")`, which writes to `localStorage` and, when the page is running as
 a published Claude artifact, to a cloud store. `touched[key]` guards against a
 slow cloud read overwriting a local edit; do not remove it.
@@ -60,7 +63,14 @@ Rendering is full innerHTML replacement, no virtual DOM:
   the search box keeps focus.
 
 Each view is a function returning an HTML string: `viewCalendar`, `viewBoard`,
-`viewList`, `viewMatrix`, `viewRoutines`, `viewNotes`.
+`viewList`, `viewMatrix`, `viewRoutines`, `viewNotes`, `viewTime`.
+
+The task detail panel is a **second root**, `#sheetRoot`, drawn by
+`renderSheet()`. `render()` deliberately does not touch it, because a redraw
+while someone is typing in it would throw the caret away — so anything that
+changes a task from outside the panel must call `renderSheet()` itself.
+The panel has no save button: `patchTask()` commits on `change`, which is why
+text fields pass `redraw:false`.
 
 ### Events
 
@@ -71,6 +81,24 @@ switch is wrapped in try/catch that surfaces the error in a toast.
 
 Form inputs are the exception: `data-act="f"` is handled in the `change`
 listener, not the click switch. `npm test` knows about both.
+
+### Activity, documents and time
+
+`logAct(taskId, kind, text, meta)` appends to `S.activity`; `logChanges()`
+diffs a task before and after an edit and writes one entry per changed field.
+Keep `FIELD_LABEL` in step with the fields a task has, or changes go unlogged.
+
+Documents are markdown in `S.docs`. On the desktop each one is mirrored into
+`<vault>/Everyday Orbit/<title> <id>.md` with YAML front matter carrying
+`orbit-id`, which is how an edit made in Obsidian finds its way back to the
+right document. The loop is broken on both sides: the main process ignores
+file events for two seconds after its own write, and `applyVaultChange()`
+never writes back to the vault.
+
+Time tracking stores one `S.sessions` row per run. A task total is always
+summed from those rows, never cached on the task. The timer in flight lives in
+`prefs.running` so it survives a reload, and it is paused rather than resumed
+on start-up, so a timer left running overnight does not bank the hours.
 
 ## Conventions that exist for a reason
 
@@ -103,6 +131,18 @@ when a nav item is picked.
 Only one rule ever sets the rail's transform — `body:not(.rail-open) .rail` —
 rather than a base rule plus an override. Keep it that way; it is easier to reason
 about and avoids a cascade fight.
+
+## Desktop-only features
+
+The floating timer needs a second always-on-top window and the vault sync needs
+a real filesystem, so both live behind `window.orbit` from `preload.js`.
+`hasDesktop()` gates the UI: in a browser those controls are hidden or say
+plainly that they need the desktop app. Never let a `window.orbit` call run
+unguarded — the browser build is not a degraded mode, it is the common one.
+
+`ipcMain.on("timer:state")` carries traffic **both** ways on one channel: a
+payload with `cmd` is a button press on the floating window heading for the
+planner, anything else is state heading for the widget.
 
 ## The two places this code runs
 

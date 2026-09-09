@@ -70,11 +70,12 @@ test('colours come from tokens, not hardcoded hex in rules', () => {
   assert.deepStrictEqual(stray, [], 'hardcoded colours outside :root: ' + stray.join(', '));
 });
 
-test('the six state keys are the ones persistence knows about', () => {
+test('the state keys are the ones persistence knows about', () => {
   const m = jsCode.match(/const KEYS\s*=\s*\[([^\]]+)\]/);
   assert.ok(m, 'KEYS array not found');
   const keys = [...m[1].matchAll(/"([a-z]+)"/g)].map(x => x[1]);
-  assert.deepStrictEqual(keys, ['categories', 'tasks', 'routines', 'notes', 'completions', 'prefs']);
+  assert.deepStrictEqual(keys, ['categories', 'tasks', 'routines', 'notes', 'completions',
+    'prefs', 'activity', 'docs', 'sessions']);
 });
 
 test('the Eisenhower quadrant is derived, never stored on a task', () => {
@@ -88,6 +89,71 @@ test('the app ships with no personal data', () => {
   for (const word of banned) {
     assert.ok(lower.indexOf(word) === -1, 'found "' + word + '" in the shipped sources');
   }
+});
+
+/* ---------- the app and the shell must agree ---------- */
+
+test('the vault file format round-trips between the app and the shell', () => {
+  const mainJs = read('main.js');
+
+  // The shape app.js writes (docFileBody) and main.js reads back (readBack).
+  const file = [
+    '---',
+    'title: "Missing figures"',
+    'task: "Chase Priya"',
+    'category: "Office"',
+    'updated: 2026-09-09T10:00:00.000Z',
+    'orbit-id: d_abc123',
+    '---',
+    '',
+    '# Context',
+    '',
+    'Body text.'
+  ].join('\n');
+
+  // app.js must emit the id line the shell keys on.
+  assert.ok(js.includes('"\\norbit-id: "+d.id'), 'app.js no longer writes orbit-id into the front matter');
+
+  // main.js must recover the id, the title and the body from exactly that.
+  const idRe = /^orbit-id:\s*(\S+)\s*$/m;
+  const titleRe = /^title:\s*(.*)$/m;
+  const stripRe = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
+  for (const src of [idRe, titleRe, stripRe]) {
+    assert.ok(mainJs.includes(src.source), 'main.js no longer parses with ' + src);
+  }
+  assert.strictEqual((file.match(idRe) || [])[1], 'd_abc123');
+  assert.strictEqual(JSON.parse((file.match(titleRe) || [])[1]), 'Missing figures');
+  assert.strictEqual(file.replace(stripRe, '').replace(/^\r?\n/, ''), '# Context\n\nBody text.');
+});
+
+test('everything reaching the shell goes through the preload bridge', () => {
+  const preload = read('preload.js');
+  const mainJs = read('main.js');
+
+  // The agreed surface. Adding a bridge call means adding it in all three.
+  const surface = {
+    pathFor: null, saveFile: 'file:save', openFile: 'file:open',
+    chooseVault: 'vault:choose', forgetVault: 'vault:forget',
+    openVault: 'vault:open', useVault: 'vault:use',
+    writeDoc: 'doc:write', deleteDoc: 'doc:delete', onVaultChange: 'vault:changed',
+    timer: 'timer:state', popTimer: 'timer:pop', onTimerCmd: 'timer:cmd'
+  };
+  for (const [member, channel] of Object.entries(surface)) {
+    assert.ok(new RegExp('\\b' + member + '\\s*[:(]').test(preload), 'preload.js no longer exposes ' + member);
+    if (channel) assert.ok(mainJs.includes("'" + channel + "'"), 'main.js no longer handles ' + channel);
+  }
+
+  // Anything the app reaches for on the bridge has to be part of that surface.
+  const builtins = new Set(['split', 'join', 'map', 'filter', 'forEach', 'slice', 'replace',
+    'trim', 'indexOf', 'push', 'concat', 'match', 'toString', 'bind', 'call', 'apply', 'then']);
+  const used = [...new Set([...js.matchAll(/\bo\.([a-zA-Z]+)\s*\(/g)].map(m => m[1]))]
+    .filter(k => !builtins.has(k));
+  const missing = used.filter(k => !(k in surface)).sort();
+  assert.deepStrictEqual(missing, [], 'app.js calls window.orbit members preload.js does not expose: ' + missing.join(', '));
+
+  // The renderer must stay sandboxed.
+  assert.ok(/contextIsolation:\s*true/.test(read('main.js')), 'contextIsolation must stay on');
+  assert.ok(/nodeIntegration:\s*false/.test(read('main.js')), 'nodeIntegration must stay off');
 });
 
 /* ---------- the standalone build ---------- */
@@ -112,6 +178,9 @@ test('build:html produces one self-contained file', () => {
 
 test('the built file has no local asset references left', () => {
   const out = read('dist/everyday-orbit.html');
-  const refs = [...out.matchAll(/(?:src|href)="(?!https?:|#|data:)([^"]+)"/g)].map(m => m[1]);
+  // Look at the markup only: the inline script legitimately contains strings
+  // like href="$2" that are not asset references.
+  const markup = out.replace(/<script[\s\S]*?<\/script>/g, '');
+  const refs = [...markup.matchAll(/(?:src|href)="(?!https?:|#|data:)([^"]+)"/g)].map(m => m[1]);
   assert.deepStrictEqual(refs, [], 'unresolved local references: ' + refs.join(', '));
 });

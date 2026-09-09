@@ -41,6 +41,7 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "src/**/*",
       "build/icon.ico",
       "build/icon.png"

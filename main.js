@@ -1,14 +1,33 @@
-const {app, BrowserWindow, Menu, shell, dialog} = require('electron');
+const {app, BrowserWindow, Menu, shell, dialog, ipcMain, screen} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const KEY = 'everyday-orbit-v1';
-let win = null;
+
+let win = null;              // the planner
+let timerWin = null;         // the floating timer
 let updater = null;          // lazily required; absent in dev
 let updateCheckIsManual = false;
+let lastTimerState = {state: 'idle'};
+
+/* ---------------------------------------------------------------- settings
+ * The renderer keeps its own copy of the vault path for display, but the main
+ * process needs it before any window exists, so it lives here too.
+ */
+const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
+function readSettings(){
+  try{ return JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) || {}; }catch(e){ return {}; }
+}
+function writeSettings(patch){
+  const s = Object.assign(readSettings(), patch);
+  try{ fs.mkdirSync(app.getPath('userData'), {recursive: true}); fs.writeFileSync(settingsFile(), JSON.stringify(s, null, 2), 'utf8'); }catch(e){}
+  return s;
+}
 
 function iconPath(){
   return path.join(__dirname, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 }
+
+/* ------------------------------------------------------------- main window */
 
 function createWindow(){
   win = new BrowserWindow({
@@ -16,7 +35,10 @@ function createWindow(){
     title: 'Everyday Orbit',
     backgroundColor: '#F3F5F1',
     icon: iconPath(),
-    webPreferences: {contextIsolation: true, nodeIntegration: false, spellcheck: true}
+    webPreferences: {
+      contextIsolation: true, nodeIntegration: false, spellcheck: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
   });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
   win.on('page-title-updated', e => e.preventDefault());
@@ -24,10 +46,171 @@ function createWindow(){
     if(/^https?:/i.test(url)) shell.openExternal(url);
     return {action: 'deny'};
   });
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => { win = null; closeTimerWindow(); });
+  win.webContents.on('did-finish-load', () => startWatching(readSettings().vault));
 }
 
-/* ---------- backup and restore ---------- */
+/* --------------------------------------------------------- floating timer */
+
+function createTimerWindow(){
+  if(timerWin && !timerWin.isDestroyed()) return timerWin;
+  const saved = readSettings().timerPos;
+  const area = screen.getPrimaryDisplay().workArea;
+  timerWin = new BrowserWindow({
+    width: 232, height: 158,
+    x: saved ? saved.x : area.x + area.width - 256,
+    y: saved ? saved.y : area.y + area.height - 190,
+    frame: false, transparent: true, resizable: false, movable: true,
+    minimizable: false, maximizable: false, fullscreenable: false,
+    skipTaskbar: true, alwaysOnTop: true, show: false,
+    icon: iconPath(),
+    webPreferences: {
+      contextIsolation: true, nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+  /* Sit above full-screen apps too, which is the point of a focus timer. */
+  timerWin.setAlwaysOnTop(true, 'screen-saver');
+  timerWin.setVisibleOnAllWorkspaces(true, {visibleOnFullScreen: true});
+  timerWin.loadFile(path.join(__dirname, 'src', 'timer.html'));
+  timerWin.once('ready-to-show', () => {
+    timerWin.showInactive();                       // never steal focus
+    timerWin.webContents.send('timer:cmd', lastTimerState);
+  });
+  const remember = () => {
+    if(!timerWin || timerWin.isDestroyed()) return;
+    const b = timerWin.getBounds();
+    writeSettings({timerPos: {x: b.x, y: b.y}});
+  };
+  timerWin.on('moved', remember);
+  timerWin.on('closed', () => { timerWin = null; });
+  return timerWin;
+}
+function closeTimerWindow(){
+  if(timerWin && !timerWin.isDestroyed()) timerWin.destroy();
+  timerWin = null;
+}
+
+ipcMain.on('timer:state', (e, payload) => {
+  /* Two directions share this channel: a command carries `cmd`, state does not. */
+  if(payload && payload.cmd){
+    if(payload.cmd === 'hide'){ closeTimerWindow(); return; }
+    if(win && !win.isDestroyed()) win.webContents.send('timer:cmd', payload);
+    return;
+  }
+  lastTimerState = payload || {state: 'idle'};
+  if(timerWin && !timerWin.isDestroyed()) timerWin.webContents.send('timer:cmd', lastTimerState);
+  /* A timer that stops closes the window with it. */
+  if(lastTimerState.state === 'idle') closeTimerWindow();
+});
+ipcMain.on('timer:pop', () => {
+  const w = createTimerWindow();
+  if(w.isDestroyed()) return;
+  if(!w.isVisible()) w.showInactive();
+  w.webContents.send('timer:cmd', lastTimerState);
+});
+
+/* ------------------------------------------------------------ vault sync */
+
+const VAULT_DIR = 'Everyday Orbit';
+let watcher = null;
+let watchedDir = '';
+const justWritten = new Map();          // file -> ms, so our own writes do not echo back
+let debounce = null;
+
+function vaultDir(vault){ return vault ? path.join(vault, VAULT_DIR) : ''; }
+
+function startWatching(vault){
+  stopWatching();
+  const dir = vaultDir(vault);
+  if(!dir) return;
+  try{ fs.mkdirSync(dir, {recursive: true}); }catch(e){ return; }
+  watchedDir = dir;
+  try{
+    watcher = fs.watch(dir, {persistent: false}, (evt, file) => {
+      if(!file || !/\.md$/i.test(file)) return;
+      const at = justWritten.get(file);
+      if(at && Date.now() - at < 2000) return;      // this was us
+      clearTimeout(debounce);
+      debounce = setTimeout(() => readBack(file), 250);
+    });
+  }catch(e){ watcher = null; }
+}
+function stopWatching(){
+  if(watcher){ try{ watcher.close(); }catch(e){} }
+  watcher = null; watchedDir = '';
+}
+/* A document edited in Obsidian comes back in through here. */
+function readBack(file){
+  if(!watchedDir || !win || win.isDestroyed()) return;
+  const full = path.join(watchedDir, file);
+  let text = null;
+  try{ text = fs.readFileSync(full, 'utf8'); }catch(e){ return; }   // deleted, or mid-write
+  const id = (text.match(/^orbit-id:\s*(\S+)\s*$/m) || [])[1];
+  if(!id) return;                                   // not one of ours
+  const title = (text.match(/^title:\s*(.*)$/m) || [])[1];
+  let clean = title || '';
+  try{ if(/^".*"$/.test(clean)) clean = JSON.parse(clean); }catch(e){}
+  win.webContents.send('vault:changed', {
+    id: id, file: file, title: clean,
+    md: text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').replace(/^\r?\n/, '')
+  });
+}
+
+ipcMain.handle('vault:choose', async () => {
+  if(!win) return null;
+  const res = await dialog.showOpenDialog(win, {
+    title: 'Choose your Obsidian vault',
+    message: 'Documents are written into an “Everyday Orbit” folder inside it.',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if(res.canceled || !res.filePaths[0]) return null;
+  const vault = res.filePaths[0];
+  writeSettings({vault: vault});
+  startWatching(vault);
+  return vault;
+});
+ipcMain.handle('vault:forget', () => { writeSettings({vault: ''}); stopWatching(); return true; });
+ipcMain.on('vault:use', (e, p) => { if(p){ writeSettings({vault: p}); startWatching(p); } });
+ipcMain.on('vault:open', () => {
+  const dir = vaultDir(readSettings().vault);
+  if(dir){ try{ fs.mkdirSync(dir, {recursive: true}); }catch(e){} shell.openPath(dir); }
+});
+
+ipcMain.on('doc:write', (e, doc) => {
+  const dir = vaultDir(readSettings().vault);
+  if(!dir || !doc || !doc.file) return;
+  try{
+    fs.mkdirSync(dir, {recursive: true});
+    justWritten.set(doc.file, Date.now());
+    fs.writeFileSync(path.join(dir, doc.file), doc.body, 'utf8');
+  }catch(err){}
+});
+ipcMain.on('doc:delete', (e, doc) => {
+  const dir = vaultDir(readSettings().vault);
+  if(!dir || !doc || !doc.file) return;
+  try{
+    justWritten.set(doc.file, Date.now());
+    fs.unlinkSync(path.join(dir, doc.file));
+  }catch(err){}
+});
+
+/* ------------------------------------------------------------ attachments */
+
+ipcMain.on('file:save', (e, req) => {
+  e.returnValue = null;
+  if(!req || !req.path) return;
+  try{
+    const dir = path.join(app.getPath('userData'), 'attachments', String(req.task || 'misc'));
+    fs.mkdirSync(dir, {recursive: true});
+    const dest = path.join(dir, Date.now() + '-' + path.basename(req.name || req.path));
+    fs.copyFileSync(req.path, dest);
+    e.returnValue = {path: dest};
+  }catch(err){ e.returnValue = null; }
+});
+ipcMain.on('file:open', (e, p) => { if(p) shell.openPath(p); });
+
+/* ------------------------------------------------------- backup / restore */
 
 async function backup(){
   if(!win) return;
@@ -94,7 +277,7 @@ async function restore(){
   }
 }
 
-/* ---------- updates ----------
+/* ------------------------------------------------------------------ updates
  * Installed copies check GitHub Releases on launch and then every six hours.
  * The portable .exe and a `npm start` dev run are not updatable, so the
  * updater is never loaded there.
@@ -171,7 +354,7 @@ function checkManually(){
   check();
 }
 
-/* ---------- menu ---------- */
+/* --------------------------------------------------------------------- menu */
 
 function about(){
   dialog.showMessageBox(win, {
@@ -192,6 +375,13 @@ function buildMenu(){
       {label: 'Back up planner…', accelerator: 'CmdOrCtrl+S', click: backup},
       {label: 'Restore from backup…', accelerator: 'CmdOrCtrl+O', click: restore},
       {type: 'separator'},
+      {label: 'Open the vault folder', click: () => {
+        const dir = vaultDir(readSettings().vault);
+        if(dir){ try{ fs.mkdirSync(dir, {recursive: true}); }catch(e){} shell.openPath(dir); }
+        else dialog.showMessageBox(win, {type: 'info', message: 'No vault connected yet',
+          detail: 'Open Settings in the planner and choose your Obsidian vault.'});
+      }},
+      {type: 'separator'},
       isMac ? {role: 'close'} : {role: 'quit'}
     ]},
     {label: 'Edit', submenu: [
@@ -200,6 +390,11 @@ function buildMenu(){
     ]},
     {label: 'View', submenu: [
       {role: 'reload'}, {type: 'separator'},
+      {label: 'Floating timer', accelerator: 'CmdOrCtrl+Shift+T', click: () => {
+        if(timerWin && !timerWin.isDestroyed()) closeTimerWindow();
+        else { const w = createTimerWindow(); if(!w.isVisible()) w.showInactive(); }
+      }},
+      {type: 'separator'},
       {role: 'resetZoom'}, {role: 'zoomIn'}, {role: 'zoomOut'}, {type: 'separator'},
       {role: 'togglefullscreen'}
     ]},
@@ -227,6 +422,7 @@ if(!app.requestSingleInstanceLock()){
     });
   });
   app.on('window-all-closed', () => {
+    stopWatching();
     if(process.platform !== 'darwin') app.quit();
   });
 }

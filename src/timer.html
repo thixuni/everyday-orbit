@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Everyday Orbit timer</title>
+<style>
+:root{
+  --surface:#FFFFFF; --surface-2:#FAFBF8; --line:#E5E9E1; --line-2:#D5DCCE;
+  --ink:#222A24; --ink-2:#495247; --muted:#7D867C; --faint:#9AA298;
+  --accent:#3F7D5C; --danger:#C25340; --danger-soft:#FAE8E4;
+  --on-accent:#FFFFFF; --tint-base:#FFFFFF;
+  --ff:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --fd:"Gabarito","Plus Jakarta Sans",system-ui,sans-serif;
+  --c:#3F7D5C;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:var(--ff);color:var(--ink);background:transparent;
+  -webkit-font-smoothing:antialiased;overflow:hidden;user-select:none;cursor:default}
+
+.tower{height:100%;display:flex;flex-direction:column;background:var(--surface);
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  box-shadow:0 18px 44px -18px rgba(34,42,36,.45)}
+
+/* The whole strip is the drag handle; the controls opt out below. */
+.grip{-webkit-app-region:drag;display:flex;align-items:center;gap:7px;padding:8px 9px 5px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+.name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:11.5px;font-weight:600;color:var(--ink-2)}
+.close{-webkit-app-region:no-drag;width:18px;height:18px;border:0;background:none;cursor:pointer;
+  border-radius:5px;color:var(--faint);display:grid;place-items:center;padding:0;flex:none}
+.close:hover{background:var(--surface-2);color:var(--ink)}
+
+.clock{-webkit-app-region:drag;text-align:center;font-family:var(--fd);font-size:34px;font-weight:600;
+  letter-spacing:-.02em;line-height:1;padding:2px 8px 4px;font-variant-numeric:tabular-nums}
+.clock.over{color:var(--danger)}
+.mode{-webkit-app-region:drag;text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--faint);padding-bottom:6px}
+
+.bar{height:3px;background:var(--surface-2);flex:none}
+.bar i{display:block;height:100%;background:var(--c);width:0}
+.bar.over i{background:var(--danger)}
+
+.row{-webkit-app-region:no-drag;display:flex;gap:5px;padding:7px 8px 8px}
+button.act{flex:1;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--surface);
+  cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;color:var(--ink-2);
+  display:flex;align-items:center;justify-content:center;gap:5px}
+button.act:hover{background:var(--surface-2);border-color:var(--line-2)}
+button.act.go{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button.act.stop:hover{background:var(--danger-soft);border-color:var(--danger-soft);color:var(--danger)}
+svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+.idle{flex:1;display:grid;place-items:center;text-align:center;padding:0 14px;color:var(--faint);font-size:11.5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="tower" id="tower">
+  <div class="grip">
+    <span class="dot" id="dot"></span>
+    <span class="name" id="name">Nothing running</span>
+    <button class="close" id="hide" title="Hide" aria-label="Hide the timer">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div id="live" hidden>
+    <div class="clock" id="clock">0:00</div>
+    <div class="mode" id="mode">Blitz</div>
+    <div class="bar" id="bar"><i id="fill"></i></div>
+    <div class="row">
+      <button class="act go" id="toggle"><svg viewBox="0 0 24 24" id="ticon"><path d="M9 5.5v13M15 5.5v13"/></svg><span id="tlabel">Pause</span></button>
+      <button class="act stop" id="stop"><svg viewBox="0 0 24 24"><rect x="6.2" y="6.2" width="11.6" height="11.6" rx="2"/></svg>Stop</button>
+    </div>
+  </div>
+  <div class="idle" id="idle">Start a timer on a task and it will show up here.</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var api = window.orbit || null;
+  var el = function(id){ return document.getElementById(id); };
+  var state = {state:"idle"};
+
+  function fmt(s){
+    s = Math.max(0, Math.round(s));
+    var h = Math.floor(s/3600), m = Math.floor(s%3600/60), ss = s%60;
+    var p = function(n){ return String(n).padStart(2,"0"); };
+    return (h ? h+":"+p(m) : m) + ":" + p(ss);
+  }
+
+  function paint(){
+    var live = state.state === "running" || state.state === "paused";
+    el("live").hidden = !live;
+    el("idle").hidden = live;
+    if(!live){
+      el("name").textContent = "Nothing running";
+      document.documentElement.style.setProperty("--c", "#3F7D5C");
+      return;
+    }
+    document.documentElement.style.setProperty("--c", state.colour || "#3F7D5C");
+    el("name").textContent = state.title || "Task";
+    el("dot").style.background = state.colour || "#3F7D5C";
+
+    var secs = state.secs || 0, est = state.est || 0;
+    var counting = state.mode === "countdown" && est > 0;
+    var shown = counting ? Math.abs(est - secs) : secs;
+    el("clock").textContent = (state.over ? "+" : "") + fmt(shown);
+    el("clock").classList.toggle("over", !!state.over);
+    el("bar").classList.toggle("over", !!state.over);
+    el("mode").textContent = state.state === "paused" ? "Paused"
+      : (counting ? (state.over ? "Overtime" : "Blitz") : "Stopwatch");
+    el("fill").style.width = counting ? Math.min(100, secs/est*100).toFixed(1)+"%" : "100%";
+
+    var run = state.state === "running";
+    el("tlabel").textContent = run ? "Pause" : "Resume";
+    el("toggle").classList.toggle("go", run);
+    el("ticon").innerHTML = run ? '<path d="M9 5.5v13M15 5.5v13"/>' : '<path d="M7.5 5.4v13.2l10.6-6.6z"/>';
+  }
+
+  if(api && api.onTimerCmd){
+    api.onTimerCmd(function(d){ state = d || {state:"idle"}; paint(); });
+  }
+  var send = function(cmd){ if(api && api.timer) api.timer({cmd:cmd}); };
+  el("toggle").addEventListener("click", function(){ send("toggle"); });
+  el("stop").addEventListener("click", function(){ send("stop"); });
+  el("hide").addEventListener("click", function(){ send("hide"); });
+  paint();
+})();
+</script>
+</body>
+</html>

@@ -67,8 +67,17 @@ function baseCategories(){
 }
 function blankState(){
   return {categories:baseCategories(),tasks:[],routines:[],notes:[],completions:{},
-    prefs:{hidden:[],scratch:"",owner:"",setup:false}};
+    activity:[],docs:[],sessions:[],
+    prefs:{hidden:[],scratch:"",owner:"",setup:false,vault:"",
+      timer:{pomo:false,work:60,brk:15},running:null}};
 }
+/* Tasks gained fields over time; older saved tasks predate them. Read through
+   these rather than assuming the field is there. */
+const tStart=t=>t.start||"";
+const tTags=t=>Array.isArray(t.tags)?t.tags:[];
+const tLinks=t=>Array.isArray(t.links)?t.links:[];
+const tFiles=t=>Array.isArray(t.attachments)?t.attachments:[];
+const tEst=t=>Number(t.est)||0;
 function sampleState(){
   const st=blankState(),o=n=>ymd(addDays(today(),n));
   const T=(title,due,cat,status,u,i,extra)=>Object.assign({id:uid("t"),title:title,desc:"",due:due,cat:cat,status:status,
@@ -113,7 +122,7 @@ function sampleState(){
 }
 
 /* ============ state + persistence ============ */
-const KEYS=["categories","tasks","routines","notes","completions","prefs"];
+const KEYS=["categories","tasks","routines","notes","completions","prefs","activity","docs","sessions"];
 let S=blankState();
 let db=null,dirty={},timers={},suppress={},touched={};
 const LS="everyday-orbit-v1";
@@ -229,18 +238,21 @@ function overdueItems(){
 }
 
 /* ============ view state ============ */
-const V={view:"calendar",calMode:"week",anchor:today(),taskMode:"board",q:"",odOpen:true,adv:false,
+const V={view:"calendar",calMode:"week",anchor:today(),taskMode:"board",q:"",odOpen:true,adv:false,sheet:null,range:"week",
   f:{quick:"open",status:"",cat:"",quad:"",from:"",to:"",sort:"due"},noteId:null,noteTag:""};
 
 /* ============ rail + topbar ============ */
 const NAV=[{id:"calendar",name:"Calendar",icon:"i-calendar"},{id:"tasks",name:"Tasks",icon:"i-board"},
- {id:"matrix",name:"Matrix",icon:"i-grid"},{id:"routines",name:"Routines",icon:"i-repeat"},{id:"notes",name:"Notes",icon:"i-note"}];
+ {id:"matrix",name:"Matrix",icon:"i-grid"},{id:"routines",name:"Routines",icon:"i-repeat"},{id:"notes",name:"Notes",icon:"i-note"},
+ {id:"time",name:"Time",icon:"i-chart"}];
 function navCount(id){
   if(id==="calendar"){const o=overdueItems();return o.tasks.length+o.miss.length;}
   if(id==="tasks")return S.tasks.filter(isOpen).length;
   if(id==="matrix")return S.tasks.filter(t=>isOpen(t)&&quadOf(t)==="do").length;
   if(id==="routines")return S.routines.filter(r=>routineOn(r,today())&&!doneR(r,TODAY())).length;
-  return S.notes.length;
+  if(id==="notes")return S.notes.length;
+  if(id==="time")return 0;
+  return 0;
 }
 /* On a narrow screen the rail is a drawer over the view; on a wide one the
    class is inert because the rail is always in the layout. */
@@ -281,6 +293,10 @@ function renderTopbar(){
     const due=S.routines.filter(r=>routineOn(r,today())).length,done=S.routines.filter(r=>routineOn(r,today())&&doneR(r,TODAY())).length;
     title="Routines & Habits";sub=S.routines.length+" routines · "+done+" of "+due+" done today";
     right=topSearch("Search routines")+'<button class="btn btn-primary" data-act="new-routine">'+icon("i-plus")+'New routine</button>';
+  }else if(V.view==="time"){
+    const tot=sessionsIn(V.range||"week").reduce((n,x)=>n+x.secs,0);
+    title="Time";sub=fmtDur(tot)+" tracked · "+((RANGES.find(x=>x.id===(V.range||"week"))||RANGES[0]).name.toLowerCase());
+    right=topSearch("Search tasks");
   }else{
     title="Notes";sub=S.notes.length+" notes · action items land in your tasks and calendar";
     right=topSearch("Search notes")+'<button class="btn" data-act="scratch">'+icon("i-bolt")+'Scratch pad</button>'+
@@ -289,7 +305,7 @@ function renderTopbar(){
   const hid=hiddenCats().length;
   const notice=hid?'<button class="filter-pill on" data-act="cat-all" title="Show all categories again">'+icon("i-filter")+hid+(hid===1?" category":" categories")+' hidden'+icon("i-x","ic-14")+'</button>':"";
   const menu='<button class="rail-toggle" data-act="rail" aria-label="Show the sidebar" title="Sidebar">'+icon("i-menu","ic-18")+'</button>';
-  el("topbar").innerHTML=menu+'<div class="title-wrap"><h1>'+title+'</h1><p>'+esc(sub)+'</p></div><div class="spacer"></div>'+notice+right;
+  el("topbar").innerHTML=menu+'<div class="title-wrap"><h1>'+title+'</h1><p>'+esc(sub)+'</p></div><div class="spacer"></div>'+timerBar()+notice+right;
 }
 
 /* ============ shared fragments ============ */
@@ -686,6 +702,17 @@ function settingsModal(){
         (n===0?'<button class="btn btn-sm" data-act="load-sample">'+icon("i-sparkle","ic-14")+'Load the sample week</button>':"")+
       '</div>'+
     '</div>'+
+    (hasDesktop()?'<div>'+
+      '<div class="sec-label" style="margin-bottom:6px">Obsidian vault</div>'+
+      '<p style="margin:0 0 10px;color:var(--ink-2)">'+(vaultPath()
+        ? 'Documents are mirrored into <b>'+esc(vaultPath())+'/Everyday Orbit</b>. Edits you make in Obsidian come back here.'
+        : 'Pick your vault and every document is written there as a .md file, both ways.')+'</p>'+
+      '<div style="display:flex;gap:7px;flex-wrap:wrap">'+
+        '<button class="btn btn-sm" data-act="vault-pick">'+icon("i-folder","ic-14")+(vaultPath()?"Change vault":"Connect a vault")+'</button>'+
+        (vaultPath()?'<button class="btn btn-sm" data-act="vault-open">'+icon("i-pop","ic-14")+'Open the folder</button>':"")+
+        (vaultPath()?'<button class="btn btn-sm btn-danger" data-act="vault-forget">Disconnect</button>':"")+
+      '</div>'+
+    '</div>':"")+
     '<div>'+
       '<div class="sec-label" style="margin-bottom:6px">Start over</div>'+
       '<p style="margin:0 0 10px;color:var(--ink-2)">Clears every task, routine and note and returns the categories to their defaults. Back up first if you might want any of it.</p>'+
@@ -770,52 +797,6 @@ function quadFromFlags(u,i){
   return "drop";
 }
 
-function renderPrio(){
-  const M=el("modalRoot"),w=el("tPrio");if(!w)return;
-  const st={urgent:M.dataset.urgent||"",important:M.dataset.important||""};
-  const q=quadFromFlags(st.urgent,st.important),Q=q?QUADS.find(x=>x.id===q):null;
-  const half=st.urgent!==""||st.important!=="";
-  w.innerHTML='<div class="pickers">'+PRIO_OPTS.map(o=>{
-      const on=st[o.k]===o.v;
-      return '<button class="pick flag'+(on?" on":"")+'" data-act="t-flag" data-k="'+o.k+'" data-v="'+o.v+
-        '" role="switch" aria-checked="'+on+'"><span class="flag-box">'+icon("i-check")+'</span>'+esc(o.name)+'</button>';
-    }).join("")+'</div>'+
-    '<div class="prio-out">'+(Q
-      ? '<span class="chip chip-q '+Q.cls+'">'+icon(Q.icon,"ic-14")+esc(Q.name)+'</span><span class="prio-note">'+esc(Q.note)+'</span>'
-      : '<span class="chip">Not prioritised</span><span class="prio-note">'+
-        (half?"Tick one from the other pair to place it in the matrix."
-             :"Tick how urgent and how important this is.")+'</span>')+
-    '</div>';
-}
-
-function taskModal(id,preset){
-  const t=id?taskById(id):Object.assign({id:"",title:"",desc:"",due:"",cat:S.categories[0].id,status:"backlog",urgent:null,important:null,subtasks:[]},preset||{});
-  if(!t)return;
-  const subs=t.subtasks||[];
-  openModal('<div class="modal" role="dialog" aria-modal="true" aria-label="Task">'+
-    '<div class="mhead2"><h2>'+(id?"Edit task":"New task")+'</h2>'+
-    (id?'<button class="btn btn-sm btn-ghost btn-danger" data-act="task-delete" data-id="'+id+'">'+icon("i-trash","ic-14")+'Delete</button>':"")+
-    '<button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div>'+
-    '<div class="mbody">'+
-    field("Task","<input class=\"inp\" id=\"tTitle\" value=\""+esc(t.title)+"\" placeholder=\"What needs doing?\">")+
-    field("Description",'<textarea class="inp" id="tDesc" rows="3" placeholder="Any detail worth keeping">'+esc(t.desc)+'</textarea>')+
-    '<div class="grid3">'+
-      field("Due date",'<input class="inp" type="date" id="tDue" value="'+esc(t.due||"")+'">')+
-      field("Status",'<select class="inp" id="tStatus">'+STATUSES.map(s=>'<option value="'+s.id+'"'+(t.status===s.id?" selected":"")+'>'+esc(s.name)+'</option>').join("")+'</select>')+
-      field("Category",'<select class="inp" id="tCat">'+S.categories.map(c=>'<option value="'+c.id+'"'+(t.cat===c.id?" selected":"")+'>'+esc(c.name)+'</option>').join("")+'</select>')+
-    '</div>'+
-    field("Priority — this places it in the Eisenhower matrix",'<div id="tPrio"></div>')+
-    field("Subtasks",'<div id="tSubs">'+subs.map(s=>subRow(s)).join("")+'</div>'+
-      '<button class="btn btn-sm" data-act="sub-add" style="margin-top:8px">'+icon("i-plus","ic-14")+'Add subtask</button>')+
-    '</div>'+
-    '<div class="mfoot"><span style="color:var(--muted);font-size:12px">'+(id?"Changes save when you hit save":"Added to your board, list and calendar")+'</span>'+
-    '<div class="spacer" style="flex:1"></div><button class="btn" data-act="close">Cancel</button>'+
-    '<button class="btn btn-primary" data-act="task-save" data-id="'+(id||"")+'">'+icon("i-check")+'Save task</button></div></div>');
-  const M=el("modalRoot");
-  M.dataset.urgent=flagVal(t.urgent);
-  M.dataset.important=flagVal(t.important);
-  renderPrio();
-}
 function quadName(t){const q=quadOf(t);return q?QUADS.find(x=>x.id===q).name:"Not prioritised";}
 function subRow(s){return '<div class="sub-row'+(s.d?" done":"")+'" data-sid="'+(s.id||uid("s"))+'">'+
   '<button class="tick'+(s.d?" on":"")+'" data-act="sub-toggle" aria-label="Toggle subtask">'+icon("i-check")+'</button>'+
@@ -900,36 +881,71 @@ function renderView(){
   else if(V.view==="tasks")vp.innerHTML=V.taskMode==="board"?viewBoard():viewList();
   else if(V.view==="matrix")vp.innerHTML=viewMatrix();
   else if(V.view==="routines")vp.innerHTML=viewRoutines();
+  else if(V.view==="time")vp.innerHTML=viewTime();
   else vp.innerHTML=viewNotes();
   const gs=el("gridScroll");if(gs)gs.scrollTop=Math.max(0,(7-H0)*PX-8);
 }
 function render(){renderRail();renderTopbar();renderView();}
 
 /* ============ actions ============ */
-const readFlag=v=>v===""?null:v==="1";
 function toggleTaskDone(id){
   const t=taskById(id);if(!t)return;
-  if(t.status==="completed"){t.status="planned";t.completedAt=null;}
-  else{t.status="completed";t.completedAt=TODAY();}
+  if(t.status==="completed"){t.status="planned";t.completedAt=null;logAct(id,"reopened","Reopened the task");}
+  else{t.status="completed";t.completedAt=TODAY();logAct(id,"done","Completed the task");}
   save("tasks");render();
 }
-function readSubs(){
-  return Array.prototype.map.call(el("modalRoot").querySelectorAll(".sub-row"),row=>({
-    id:row.dataset.sid,t:row.querySelector("input").value.trim(),d:row.querySelector(".tick").classList.contains("on")
-  })).filter(s=>s.t);
+
+function readSheetSubs(){
+  const w=el("shSubs");if(!w)return null;
+  return Array.prototype.map.call(w.querySelectorAll(".sub-row"),row=>({
+    id:row.dataset.sid,t:row.querySelector("input").value.trim(),
+    d:row.querySelector(".tick").classList.contains("on")})).filter(x=>x.t);
 }
-function saveTask(id){
-  const M=el("modalRoot"),title=el("tTitle").value.trim();
-  if(!title){el("tTitle").focus();toast("Give the task a name first");return;}
-  const data={title:title,desc:el("tDesc").value.trim(),due:el("tDue").value||"",status:el("tStatus").value,cat:el("tCat").value,subtasks:readSubs()};
-  let t=id?taskById(id):null;
-  if(t)Object.assign(t,data);
-  else{t=Object.assign({id:uid("t"),created:TODAY(),completedAt:null,urgent:null,important:null},data);S.tasks.push(t);}
-  t.urgent=readFlag(M.dataset.urgent||"");
-  t.important=readFlag(M.dataset.important||"");
-  if(t.status==="completed"&&!t.completedAt)t.completedAt=TODAY();
-  if(t.status!=="completed")t.completedAt=null;
-  save("tasks");closeModal();render();toast(id?"Task updated":"Task added");
+function commitSubs(){
+  const subs=readSheetSubs(),sh=V.sheet;
+  if(!subs||!sh)return;
+  if(!sh.id){patchDraft({subtasks:subs});return;}
+  const t=taskById(sh.id);
+  if(t&&JSON.stringify(t.subtasks||[])!==JSON.stringify(subs)){t.subtasks=subs;save("tasks");render();}
+}
+
+/* Deleting a task takes its history, documents and sessions with it. */
+function deleteTask(id){
+  const t=taskById(id);if(!t)return;
+  docsFor(id).forEach(removeDocFromVault);
+  S.tasks=S.tasks.filter(x=>x.id!==id);
+  S.notes.forEach(x=>{x.actions=(x.actions||[]).filter(y=>y.taskId!==id);});
+  S.tasks.forEach(x=>{if(Array.isArray(x.links))x.links=x.links.filter(l=>l!==id);});
+  S.docs=S.docs.filter(d=>d.task!==id);
+  S.activity=S.activity.filter(a=>a.task!==id);
+  S.sessions=S.sessions.filter(x=>x.task!==id);
+  if(running()&&running().task===id){S.prefs.running=null;syncTimerWindow();}
+  ["tasks","notes","docs","activity","sessions","prefs"].forEach(save);
+  closeSheet();render();toast("Task deleted");
+}
+
+const fmtBytes=n=>{n=Number(n)||0;return n<1024?n+" B":n<1048576?Math.round(n/1024)+" KB":(n/1048576).toFixed(1)+" MB";};
+function pickAttachment(){
+  if(!hasDesktop()){toast("Attaching files needs the desktop app");return;}
+  let inp=el("orbitFile");
+  if(!inp){inp=document.createElement("input");inp.type="file";inp.id="orbitFile";
+    inp.style.display="none";document.body.appendChild(inp);}
+  inp.value="";inp.click();
+}
+function takeAttachment(file){
+  const t=sheetTask();if(!file||!t||!V.sheet||!V.sheet.id)return;
+  const o=desktop(),rec={id:uid("f"),name:file.name,size:fmtBytes(file.size),type:file.type||""};
+  /* Electron 32 dropped File.path, so the preload hands back the real path. */
+  const src=o&&o.pathFor?o.pathFor(file):file.path;
+  if(o&&o.saveFile&&src){
+    try{const saved=o.saveFile({path:src,name:file.name,task:t.id});if(saved&&saved.path)rec.path=saved.path;}catch(e){}
+  }
+  patchCurrent({attachments:tFiles(t).concat([rec])});
+}
+function popOutTimer(){
+  const o=desktop();
+  if(o&&o.popTimer){try{o.popTimer();}catch(e){}syncTimerWindow();return;}
+  toast("The floating timer needs the desktop app");
 }
 function saveRoutine(id){
   const M=el("modalRoot"),title=el("rTitle").value.trim();
@@ -1002,18 +1018,54 @@ document.addEventListener("click",function(e){
     case "quick":V.f.quick=n.dataset.v;renderView();break;
     case "adv-toggle":V.adv=!V.adv;renderView();break;
     case "filter-clear":V.f={quick:V.f.quick,status:"",cat:"",quad:"",from:"",to:"",sort:"due"};renderView();break;
-    case "task":if(id)taskModal(id);break;
+    case "task":if(id)openSheet(id);break;
+    case "sh-open":if(id)openSheet(id);break;
     case "task-done":toggleTaskDone(id);break;
-    case "new-task":taskModal(null,{due:n.dataset.date||"",status:n.dataset.status||"backlog"});break;
-    case "task-save":saveTask(id||null);break;
+    case "new-task":openSheet(null,{due:n.dataset.date||"",status:n.dataset.status||"backlog"});break;
     case "task-delete":if(arm(n,"Delete for good?")){S.tasks=S.tasks.filter(t=>t.id!==id);S.notes.forEach(x=>{x.actions=(x.actions||[]).filter(y=>y.taskId!==id);});save("tasks");save("notes");closeModal();render();toast("Task deleted");}break;
-    case "t-flag":{const k=n.dataset.k;
-      // Ticking the opposite box replaces it; ticking the same one clears the axis.
-      M.dataset[k]=(M.dataset[k]===n.dataset.v)?"":n.dataset.v;
-      renderPrio();break;}
-    case "sub-add":{const w=el("tSubs");w.insertAdjacentHTML("beforeend",subRow({id:uid("s"),t:"",d:false}));w.lastElementChild.querySelector("input").focus();break;}
-    case "sub-toggle":n.classList.toggle("on");n.closest(".sub-row").classList.toggle("done");break;
-    case "sub-del":n.closest(".sub-row").remove();break;
+    case "sh-sub-add":{const w=el("shSubs");w.insertAdjacentHTML("beforeend",subRow({id:uid("s"),t:"",d:false}));w.lastElementChild.querySelector("input").focus();break;}
+    case "sub-toggle":n.classList.toggle("on");n.closest(".sub-row").classList.toggle("done");commitSubs();break;
+    case "sub-del":n.closest(".sub-row").remove();commitSubs();break;
+
+    /* ---- task detail sheet ---- */
+    case "sheet-close":closeSheet();break;
+    case "sh-create":createFromDraft();break;
+    case "sh-tab":V.sheet.tab=n.dataset.v;renderSheet();break;
+    case "sh-done":{const t=sheetTask();if(t&&V.sheet.id)toggleTaskDone(t.id),renderSheet();break;}
+    case "sh-delete":if(arm(n,"Delete for good?"))deleteTask(V.sheet.id);break;
+    case "sh-flag":{const t=sheetTask();if(!t)break;
+      const k=n.dataset.k,cur=flagVal(t[k]);
+      patchCurrent({[k]:cur===n.dataset.v?null:n.dataset.v==="1"});break;}
+    case "sh-tag-del":{const t=sheetTask();if(!t)break;
+      patchCurrent({tags:tTags(t).filter(x=>x!==n.dataset.v)});break;}
+    case "sh-link-del":{const t=sheetTask();if(!t)break;
+      patchCurrent({links:tLinks(t).filter(x=>x!==n.dataset.v)});break;}
+    case "sh-file-add":pickAttachment();break;
+    case "sh-file-del":{const t=sheetTask();if(!t)break;
+      patchCurrent({attachments:tFiles(t).filter(f=>f.id!==n.dataset.v)});break;}
+    case "sh-timer":{const t=sheetTask();if(t&&V.sheet.id)toggleTimer(t.id,n.dataset.mode);break;}
+
+    /* ---- timer ---- */
+    case "timer-toggle":toggleTimer(id||(running()||{}).task);break;
+    case "timer-stop":stopTimer();break;
+    case "timer-pop":popOutTimer();break;
+
+    /* ---- comments and documents ---- */
+    case "comment-add":{const box=el("shComment"),t=sheetTask();
+      if(!box||!t||!V.sheet.id)break;
+      const txt=box.value.trim();
+      if(!txt){box.focus();break;}
+      logAct(t.id,"comment",txt);box.value="";renderSheet();break;}
+    case "act-del":if(arm(n,"Delete?")){S.activity=S.activity.filter(a=>a.id!==id);save("activity");renderSheet();}break;
+    case "doc-new":{const t=sheetTask();if(t&&V.sheet.id)docModal(null,t.id);break;}
+    case "doc-open":docModal(id);break;
+    case "doc-save":{const title=(el("dcTitle").value||"").trim()||"Untitled",md=el("dcMd").value;
+      saveDoc(n.dataset.id||null,n.dataset.task||null,title,md);
+      closeModal();renderSheet();toast("Document saved");break;}
+    case "doc-del":if(arm(n,"Delete for good?")){deleteDoc(id);closeModal();renderSheet();toast("Document deleted");}break;
+
+    /* ---- analytics ---- */
+    case "an-range":V.range=n.dataset.v;renderView();break;
     case "mx-set":{const t=taskById(id),k=n.dataset.k;
       if(t[k]==null){t[k]=true;const o=k==="urgent"?"important":"urgent";if(t[o]==null)t[o]=false;}
       else t[k]=!t[k];
@@ -1063,6 +1115,18 @@ document.addEventListener("click",function(e){
     case "import":el("importFile").value="";el("importFile").click();break;
     case "import-apply":applyImport();break;
     case "scratch":scratchModal();break;
+    case "vault-pick":{const o=desktop();if(!o)break;
+      Promise.resolve(o.chooseVault()).then(function(pth){
+        if(!pth)return;
+        S.prefs.vault=pth;save("prefs");
+        S.docs.forEach(pushDocToVault);               // seed the folder with what exists
+        settingsModal();toast("Vault connected");
+      });break;}
+    case "vault-open":{const o=desktop();if(o&&o.openVault)o.openVault();break;}
+    case "vault-forget":if(arm(n,"Disconnect?")){const o=desktop();
+      if(o&&o.forgetVault)Promise.resolve(o.forgetVault()).then(function(){
+        S.prefs.vault="";save("prefs");settingsModal();toast("Vault disconnected");});}
+      break;
     case "rte":document.execCommand(n.dataset.cmd,false,n.dataset.v||null);
       if(n.dataset.scratch){S.prefs.scratch=el("scratchPad").innerHTML;save("prefs");}
       else{const x=noteById(V.noteId);if(x){x.html=el("rte").innerHTML;x.updated=Date.now();save("notes");}}break;
@@ -1095,20 +1159,60 @@ document.addEventListener("input",function(e){
     const li=document.querySelector(".nitem.on b");if(li)li.textContent=(x.pinned?"📌 ":"")+(t.value||"Untitled note");}return;}
   if(t.id==="aiText"&&e.inputType==="insertLineBreak")addAction(t.closest(".ai-add").querySelector('[data-act="ai-add"]').dataset.nid);
 });
+document.addEventListener("input",function(e){
+  if(e.target&&e.target.id==="dcMd"){
+    const prev=el("dcPrev");
+    if(prev)prev.innerHTML=mdToHtml(e.target.value);
+  }
+});
 document.addEventListener("keydown",function(e){
   if(e.key==="Escape"&&el("modalRoot").innerHTML&&!welcomeOpen){closeModal();return;}
+  if(e.key==="Escape"&&V.sheet&&!el("modalRoot").innerHTML){closeSheet();return;}
   if(e.key==="Escape"&&document.body.classList.contains("rail-open")){closeRail();return;}
   if(e.key==="Enter"&&e.target.id==="linkUrl"){e.preventDefault();
     const b=document.querySelector('[data-act="rte-link-apply"]');if(b)b.click();return;}
   if(e.key==="Enter"&&e.target.id==="aiText"){e.preventDefault();
     const b=document.querySelector('[data-act="ai-add"]');if(b)addAction(b.dataset.nid);return;}
-  if(e.key==="Enter"&&(e.target.id==="tTitle"||e.target.id==="rTitle")){e.preventDefault();
-    const b=document.querySelector('[data-act="task-save"],[data-act="routine-save"]');if(b)b.click();}
+  if(e.key==="Enter"&&e.target.id==="rTitle"){e.preventDefault();
+    const b=document.querySelector('[data-act="routine-save"]');if(b)b.click();return;}
+  /* The sheet has no save button: leaving the field is what commits it. */
+  if(e.key==="Enter"&&e.target.id==="shTitle"){e.preventDefault();e.target.blur();}
+});
+document.addEventListener("keydown",function(e){
+  if(e.key!=="Enter")return;
+  const t=e.target;
+  if(t&&t.id==="shTag"){
+    e.preventDefault();
+    const v=t.value.trim().replace(/^#/,""),cur=sheetTask();
+    if(v&&cur&&tTags(cur).indexOf(v)===-1)patchCurrent({tags:tTags(cur).concat([v])});
+    else t.value="";
+    return;
+  }
+  if(t&&t.id==="shComment"&&(e.metaKey||e.ctrlKey)){
+    e.preventDefault();
+    const btn=document.querySelector('[data-act="comment-add"]');
+    if(btn)btn.click();
+  }
 });
 document.addEventListener("change",function(e){
   const t=e.target;
   if(t.id==="importFile"){importPicked(t.files&&t.files[0]);return;}
   if(t.dataset&&t.dataset.act==="f"){V.f[t.dataset.k]=t.value;renderView();return;}
+  if(t.dataset&&t.dataset.act==="sh-set"){
+    const k=t.dataset.k;let v=t.value;
+    if(k==="est")v=Math.max(0,parseInt(v,10)||0);
+    if(k==="title"){v=v.trim();if(!v){const cur=sheetTask();t.value=cur?cur.title:"";return;}}
+    // Re-rendering while the caret is in a text field would throw it away.
+    patchCurrent({[k]:v},k!=="title"&&k!=="desc");
+    return;
+  }
+  if(t.dataset&&t.dataset.act==="sh-link-add"&&t.value){
+    const cur=sheetTask();
+    if(cur)patchCurrent({links:tLinks(cur).concat([t.value])});
+    return;
+  }
+  if(t.id==="shSubs"||(t.closest&&t.closest("#shSubs"))){commitSubs();return;}
+  if(t.id==="orbitFile"){takeAttachment(t.files&&t.files[0]);return;}
   if(t.id==="noteCat"){const x=noteById(V.noteId);if(x){x.cat=t.value;x.updated=Date.now();save("notes");render();}return;}
   if(t.id==="noteTags"){const x=noteById(V.noteId);if(x){x.tags=t.value.split(",").map(s=>s.trim().replace(/^#/,"")).filter(Boolean);x.updated=Date.now();save("notes");renderView();}return;}
 });
@@ -1142,12 +1246,623 @@ function maybeWelcome(){
   if(S.prefs.setup||S.tasks.length||S.routines.length||S.notes.length)return;
   welcomeShown=true;welcomeModal();
 }
+/* ============ activity log ============ */
+/* Everything that happens to a task lands here: comments and documents you
+   write, plus an automatic entry for every field that changes. */
+const FIELD_LABEL={title:"Title",desc:"Description",due:"Due date",start:"Start date",
+  status:"Status",cat:"Category",est:"Estimate",urgent:"Urgent",important:"Important",
+  tags:"Tags",links:"Linked tasks",subtasks:"Subtasks",attachments:"Attachments"};
+
+const actFor=id=>S.activity.filter(a=>a.task===id).sort((a,b)=>a.at-b.at);
+
+function logAct(taskId,kind,text,meta){
+  if(!Array.isArray(S.activity))S.activity=[];
+  S.activity.push({id:uid("a"),task:taskId,at:Date.now(),kind:kind,text:text||"",meta:meta||null});
+  save("activity");
+}
+
+/* Render a field value the way a person would say it, not the way it is stored. */
+function fieldText(k,v){
+  if(v==null||v===""||(Array.isArray(v)&&!v.length))return "empty";
+  if(k==="status")return ST(v).name;
+  if(k==="cat")return cat(v).name;
+  if(k==="due"||k==="start")return fmtDate(v);
+  if(k==="est")return fmtMins(Number(v)||0);
+  if(k==="urgent"||k==="important")return v?"yes":"no";
+  if(k==="tags")return v.join(", ");
+  if(k==="links")return v.length+(v.length===1?" task":" tasks");
+  if(k==="subtasks"||k==="attachments")return v.length+" item"+(v.length===1?"":"s");
+  return String(v);
+}
+const sameVal=(a,b)=>JSON.stringify(a==null?"":a)===JSON.stringify(b==null?"":b);
+
+/* One entry per changed field, so the thread reads as a history. */
+function logChanges(id,before,after){
+  Object.keys(FIELD_LABEL).forEach(k=>{
+    if(sameVal(before[k],after[k]))return;
+    if(k==="subtasks"||k==="attachments"){
+      if((before[k]||[]).length===(after[k]||[]).length)return;   // ticking a subtask is not a field change
+    }
+    logAct(id,"field",FIELD_LABEL[k]+": "+fieldText(k,before[k])+" → "+fieldText(k,after[k]),{f:k});
+  });
+}
+
+/* ============ time tracking ============ */
+/* Two modes. Countdown runs against the task's estimate and keeps going once
+   it passes zero, so overtime is visible rather than hidden. Stopwatch just
+   counts up, for work you cannot estimate yet. Either way each run is stored
+   as a session, and a task's total is the sum of its sessions. */
+const sessionsFor=id=>S.sessions.filter(s=>s.task===id).sort((a,b)=>b.start-a.start);
+const trackedSecs=id=>S.sessions.reduce((n,s)=>n+(s.task===id?(s.secs||0):0),0);
+const running=()=>(S.prefs&&S.prefs.running)||null;
+
+function fmtDur(secs){
+  const s=Math.max(0,Math.round(secs)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;
+  return (h?h+":"+pad(m):m)+":"+pad(ss);
+}
+function fmtMins(m){
+  m=Math.round(Number(m)||0);
+  if(!m)return "none";
+  const h=Math.floor(m/60),mm=m%60;
+  return (h?h+"h":"")+(h&&mm?" ":"")+(mm||!h?mm+"m":"");
+}
+/* Seconds on the clock right now, including the run in progress. */
+function liveSecs(){
+  const r=running();if(!r)return 0;
+  return (r.acc||0)+(r.since?Math.floor((Date.now()-r.since)/1000):0);
+}
+function startTimer(taskId,mode){
+  const r=running();
+  if(r&&r.task!==taskId)stopTimer();          // one task at a time
+  const cur=running();
+  S.prefs.running=cur&&cur.task===taskId
+    ? Object.assign({},cur,{since:Date.now()})
+    : {task:taskId,mode:mode||"countdown",acc:0,since:Date.now(),began:Date.now()};
+  save("prefs");syncTimerWindow();render();renderSheet();
+}
+function pauseTimer(){
+  const r=running();if(!r||!r.since)return;
+  S.prefs.running=Object.assign({},r,{acc:liveSecs(),since:0});
+  save("prefs");syncTimerWindow();render();renderSheet();
+}
+function stopTimer(){
+  const r=running();if(!r)return;
+  const secs=liveSecs();
+  S.prefs.running=null;
+  if(secs>=5){                                 // a five second run is a misclick, not work
+    S.sessions.push({id:uid("s"),task:r.task,mode:r.mode,start:r.began,end:Date.now(),secs:secs});
+    save("sessions");
+    logAct(r.task,"time","Tracked "+fmtDur(secs),{secs:secs,mode:r.mode});
+  }
+  save("prefs");syncTimerWindow();render();renderSheet();
+}
+function toggleTimer(taskId,mode){
+  const r=running();
+  if(r&&r.task===taskId&&r.since)pauseTimer();
+  else startTimer(taskId,mode);
+}
+
+/* The strip that sits in the top bar whenever a timer exists. */
+function timerBar(){
+  const r=running();if(!r)return "";
+  const t=taskById(r.task);if(!t)return "";
+  const c=cat(t.cat),secs=liveSecs(),est=tEst(t)*60;
+  const over=r.mode==="countdown"&&est&&secs>est;
+  const shown=r.mode==="countdown"&&est?Math.abs(est-secs):secs;
+  return '<div class="tbar'+(over?" over":"")+(r.since?"":" held")+'" style="--c:'+c.color+'">'+
+    '<button class="tbar-btn" data-act="timer-toggle" data-id="'+t.id+'" aria-label="'+(r.since?"Pause":"Resume")+'">'+icon(r.since?"i-pause":"i-play","ic-14")+'</button>'+
+    '<span class="tbar-name">'+esc(t.title)+'</span>'+
+    '<span class="tbar-time num">'+(over?"+":"")+fmtDur(shown)+'</span>'+
+    '<button class="tbar-btn" data-act="timer-stop" aria-label="Stop and log">'+icon("i-stop","ic-14")+'</button>'+
+    '<button class="tbar-btn" data-act="timer-pop" aria-label="Pop out the timer" title="Pop out">'+icon("i-pop","ic-14")+'</button>'+
+    '</div>';
+}
+
+/* ============ documents ============ */
+/* Documents are markdown, so they can live in an Obsidian vault unchanged. */
+const docsFor=id=>S.docs.filter(d=>d.task===id).sort((a,b)=>b.updated-a.updated);
+const docById=id=>S.docs.find(d=>d.id===id);
+
+/* A deliberately small markdown renderer for the preview: headings, emphasis,
+   code, quotes, lists, task boxes, rules and links. Everything is escaped
+   before any markup is added. */
+function mdToHtml(md){
+  const lines=String(md||"").split(/\r?\n/),out=[];
+  let list=null,fence=false,buf=[];
+  const inline=s=>esc(s)
+    .replace(/`([^`]+)`/g,"<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")
+    .replace(/(^|[^*])\*([^*]+)\*/g,"$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  const shut=()=>{if(list){out.push("</"+list+">");list=null;}};
+  const open=tag=>{if(list!==tag){shut();out.push("<"+tag+">");list=tag;}};
+  lines.forEach(raw=>{
+    const l=raw.replace(/\s+$/,"");
+    if(/^```/.test(l)){
+      if(fence){out.push("<pre><code>"+esc(buf.join("\n"))+"</code></pre>");buf=[];fence=false;}
+      else{shut();fence=true;}
+      return;
+    }
+    if(fence){buf.push(raw);return;}
+    if(!l.trim()){shut();return;}
+    let m;
+    if(/^---+$/.test(l)){shut();out.push("<hr>");return;}
+    if((m=l.match(/^(#{1,4})\s+(.*)$/))){shut();const n=Math.min(m[1].length+1,5);out.push("<h"+n+">"+inline(m[2])+"</h"+n+">");return;}
+    if((m=l.match(/^&gt;\s?(.*)$/))||(m=l.match(/^>\s?(.*)$/))){shut();out.push("<blockquote>"+inline(m[1])+"</blockquote>");return;}
+    if((m=l.match(/^[-*]\s+\[([ xX])\]\s+(.*)$/))){open("ul");
+      out.push('<li class="md-task"><span class="md-box'+(m[1]===" "?"":" on")+'"></span>'+inline(m[2])+"</li>");return;}
+    if((m=l.match(/^[-*]\s+(.*)$/))){open("ul");out.push("<li>"+inline(m[1])+"</li>");return;}
+    if((m=l.match(/^\d+[.)]\s+(.*)$/))){open("ol");out.push("<li>"+inline(m[1])+"</li>");return;}
+    shut();out.push("<p>"+inline(l)+"</p>");
+  });
+  if(fence&&buf.length)out.push("<pre><code>"+esc(buf.join("\n"))+"</code></pre>");
+  shut();
+  return out.join("");
+}
+
+/* A filename Obsidian is happy with, stable for a given document. */
+function docFile(d){
+  const base=String(d.title||"Untitled").replace(/[\\/:*?"<>|#^[\]]/g,"").replace(/\s+/g," ").trim().slice(0,80);
+  return (base||"Untitled")+" "+d.id.slice(-6)+".md";
+}
+/* What actually gets written to the vault: front matter Obsidian can read,
+   then the body. */
+function docFileBody(d){
+  const t=taskById(d.task),c=t?cat(t.cat):null;
+  return "---\ntitle: "+JSON.stringify(String(d.title||"Untitled"))+
+    "\ntask: "+JSON.stringify(t?t.title:"")+
+    (c?"\ncategory: "+JSON.stringify(c.name):"")+
+    "\nupdated: "+new Date(d.updated||Date.now()).toISOString()+
+    "\norbit-id: "+d.id+
+    "\n---\n\n"+String(d.md||"");
+}
+/* The inverse, for changes coming back from the vault. */
+function stripFrontMatter(text){
+  const m=String(text||"").match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+  return m?String(text).slice(m[0].length).replace(/^\r?\n/,""):String(text||"");
+}
+
+function saveDoc(id,taskId,title,md){
+  let d=id?docById(id):null;
+  const now=Date.now();
+  if(d){
+    const changed=d.md!==md||d.title!==title;
+    d.title=title;d.md=md;d.updated=now;
+    if(changed)logAct(d.task,"doc-edit","Edited the document “"+title+"”",{doc:d.id});
+  }else{
+    d={id:uid("d"),task:taskId,title:title,md:md,created:now,updated:now};
+    S.docs.push(d);
+    logAct(taskId,"doc","Added the document “"+title+"”",{doc:d.id});
+  }
+  save("docs");pushDocToVault(d);
+  return d;
+}
+function deleteDoc(id){
+  const d=docById(id);if(!d)return;
+  S.docs=S.docs.filter(x=>x.id!==id);
+  save("docs");logAct(d.task,"doc-del","Deleted the document “"+d.title+"”");
+  removeDocFromVault(d);
+}
+
+
+/* ============ task detail panel ============ */
+/* A sheet over the right-hand side rather than a full screen: the task's
+   fields at the top, its history underneath. Fields save as you leave them,
+   so there is no save button to forget. */
+
+function openSheet(id,preset){
+  if(id&&!taskById(id))return;
+  V.sheet={id:id||null,tab:"activity",
+    draft:id?null:Object.assign({title:"",desc:"",due:"",start:"",cat:S.categories[0].id,
+      status:"backlog",urgent:null,important:null,est:0,tags:[],links:[],subtasks:[],attachments:[]},preset||{})};
+  renderSheet();
+}
+function closeSheet(){V.sheet=null;renderSheet();}
+
+/* The task being shown, or the unsaved draft for a new one. */
+const sheetTask=()=>{const s=V.sheet;return s?(s.id?taskById(s.id):s.draft):null;};
+
+function patchTask(id,patch,redraw){
+  const t=taskById(id);if(!t)return;
+  const before=JSON.parse(JSON.stringify(t));
+  Object.assign(t,patch);
+  if(t.status==="completed"&&!t.completedAt)t.completedAt=TODAY();
+  if(t.status!=="completed")t.completedAt=null;
+  logChanges(id,before,t);
+  save("tasks");render();
+  if(redraw!==false)renderSheet();
+}
+/* A draft has no id yet, so edits are held until it is created. */
+function patchDraft(patch){
+  if(V.sheet&&V.sheet.draft)Object.assign(V.sheet.draft,patch);
+}
+function patchCurrent(patch,redraw){
+  const s=V.sheet;if(!s)return;
+  if(s.id)patchTask(s.id,patch,redraw);
+  else{patchDraft(patch);if(redraw!==false)renderSheet();}
+}
+function createFromDraft(){
+  const s=V.sheet;if(!s||!s.draft)return;
+  const d=s.draft;
+  if(!d.title.trim()){toast("Give the task a name first");const n=el("shTitle");if(n)n.focus();return;}
+  const t=Object.assign({id:uid("t"),created:TODAY(),completedAt:null},d);
+  S.tasks.push(t);save("tasks");
+  logAct(t.id,"created","Created this task");
+  V.sheet={id:t.id,tab:"activity",draft:null};
+  render();renderSheet();toast("Task added");
+}
+
+const metaRow=(label,inner,ic)=>'<div class="mrow"><div class="mlab">'+(ic?icon(ic,"ic-14"):"")+esc(label)+'</div><div class="mval">'+inner+'</div></div>';
+
+function sheetPrio(t){
+  const st={urgent:flagVal(t.urgent),important:flagVal(t.important)};
+  const q=quadFromFlags(st.urgent,st.important),Q=q?QUADS.find(x=>x.id===q):null;
+  return '<div class="prio-mini">'+PRIO_OPTS.map(o=>{
+      const on=st[o.k]===o.v;
+      return '<button class="pick flag sm'+(on?" on":"")+'" data-act="sh-flag" data-k="'+o.k+'" data-v="'+o.v+
+        '" role="switch" aria-checked="'+on+'"><span class="flag-box">'+icon("i-check")+'</span>'+esc(o.name)+'</button>';
+    }).join("")+'</div>'+
+    (Q?'<span class="chip chip-q '+Q.cls+'" style="margin-top:7px">'+icon(Q.icon,"ic-14")+esc(Q.name)+'</span>'
+      :'<span class="chip" style="margin-top:7px">Not prioritised</span>');
+}
+
+function sheetTime(t,isNew){
+  if(isNew)return '<span class="mnone">Available once the task exists</span>';
+  const r=running(),live=r&&r.task===t.id,secs=trackedSecs(t.id)+(live?liveSecs():0);
+  const est=tEst(t);
+  return '<div class="tm">'+
+    '<div class="tm-controls">'+
+      '<button class="btn btn-sm'+(live&&r.since?" btn-primary":"")+'" data-act="sh-timer" data-mode="countdown">'+
+        icon(live&&r.since?"i-pause":"i-play","ic-14")+(live&&r.since?"Pause":(est?"Blitz it":"Start"))+'</button>'+
+      '<button class="btn btn-sm" data-act="sh-timer" data-mode="stopwatch" title="Count up instead">'+icon("i-timer","ic-14")+'Stopwatch</button>'+
+      (live?'<button class="btn btn-sm btn-danger" data-act="timer-stop">'+icon("i-stop","ic-14")+'Stop</button>':"")+
+    '</div>'+
+    '<div class="tm-read">'+
+      '<span class="num"><b>'+fmtDur(secs)+'</b> tracked</span>'+
+      (est?'<span class="num'+(secs>est*60?" over":"")+'">'+fmtMins(est)+' estimated'+(secs>est*60?" · over by "+fmtDur(secs-est*60):"")+'</span>':"")+
+    '</div></div>';
+}
+
+function sheetTags(t){
+  const tags=tTags(t);
+  return '<div class="tagbox">'+tags.map(x=>'<span class="chip chip-tag">'+esc(x)+
+      '<button data-act="sh-tag-del" data-v="'+esc(x)+'" aria-label="Remove tag">'+icon("i-x","ic-14")+'</button></span>').join("")+
+    '<input class="tag-in" id="shTag" placeholder="'+(tags.length?"Add":"Add a tag")+'" aria-label="Add a tag">'+
+    '</div>';
+}
+
+function sheetLinks(t,isNew){
+  if(isNew)return '<span class="mnone">Available once the task exists</span>';
+  const ids=tLinks(t),others=S.tasks.filter(x=>x.id!==t.id&&ids.indexOf(x.id)===-1);
+  return '<div class="linkbox">'+
+    ids.map(id=>{const o=taskById(id);if(!o)return "";
+      return '<div class="linkrow"><button class="lk" data-act="sh-open" data-id="'+o.id+'">'+icon(cat(o.cat).icon,"ic-14")+
+        '<span>'+esc(o.title)+'</span></button>'+
+        '<button class="rowx" data-act="sh-link-del" data-v="'+o.id+'" aria-label="Unlink">'+icon("i-x","ic-14")+'</button></div>';}).join("")+
+    (others.length?'<select class="inp inp-sm" data-act="sh-link-add"><option value="">Link a task…</option>'+
+      others.slice(0,200).map(o=>'<option value="'+o.id+'">'+esc(o.title)+'</option>').join("")+'</select>':"")+
+    '</div>';
+}
+
+function sheetFiles(t,isNew){
+  if(isNew)return '<span class="mnone">Available once the task exists</span>';
+  const files=tFiles(t);
+  return '<div class="filebox">'+
+    files.map(f=>'<div class="filerow">'+icon("i-clip","ic-14")+'<span class="fname">'+esc(f.name)+'</span>'+
+      '<span class="fsize num">'+esc(f.size)+'</span>'+
+      '<button class="rowx" data-act="sh-file-del" data-v="'+f.id+'" aria-label="Remove">'+icon("i-x","ic-14")+'</button></div>').join("")+
+    (hasDesktop()
+      ? '<button class="btn btn-sm" data-act="sh-file-add">'+icon("i-plus","ic-14")+'Attach a file</button>'
+      : '<span class="mnone">Attaching files needs the desktop app</span>')+
+    '</div>';
+}
+
+/* ---- activity feed ---- */
+const ACT_ICON={created:"i-plus",comment:"i-chat",doc:"i-doc","doc-edit":"i-doc","doc-del":"i-trash",
+  field:"i-edit",time:"i-timer",done:"i-check",reopened:"i-repeat"};
+
+function relTime(ms){
+  const d=Math.floor((Date.now()-ms)/1000);
+  if(d<60)return "just now";
+  if(d<3600)return Math.floor(d/60)+"m ago";
+  if(d<86400)return Math.floor(d/3600)+"h ago";
+  const dt=new Date(ms);
+  return fmtDate(ymd(dt))+" at "+fmtTime(pad(dt.getHours())+":"+pad(dt.getMinutes()));
+}
+
+function activityFeed(t){
+  const items=actFor(t.id);
+  const who=(S.prefs&&S.prefs.owner)||"You";
+  const body=items.length?items.map(a=>{
+    if(a.kind==="comment")
+      return '<div class="act act-comment"><div class="act-top"><b>'+esc(who)+'</b><span>'+esc(relTime(a.at))+'</span>'+
+        '<button class="rowx" data-act="act-del" data-id="'+a.id+'" aria-label="Delete comment">'+icon("i-x","ic-14")+'</button></div>'+
+        '<div class="act-body">'+mdToHtml(a.text)+'</div></div>';
+    const d=a.meta&&a.meta.doc?docById(a.meta.doc):null;
+    return '<div class="act act-evt">'+icon(ACT_ICON[a.kind]||"i-dot-grid","ic-14")+
+      '<span class="act-text">'+(d?'<button class="lk lk-inline" data-act="doc-open" data-id="'+d.id+'">'+esc(a.text)+'</button>':esc(a.text))+'</span>'+
+      '<span class="act-when">'+esc(relTime(a.at))+'</span></div>';
+  }).join(""):'<div class="act-empty">Nothing yet. Comments and changes will show up here.</div>';
+  return '<div class="feed">'+body+'</div>'+
+    '<div class="composer">'+
+      '<textarea class="inp" id="shComment" rows="2" placeholder="Write a comment… markdown works"></textarea>'+
+      '<div class="composer-foot">'+
+        '<button class="btn btn-sm" data-act="doc-new">'+icon("i-doc","ic-14")+'New document</button>'+
+        '<div class="spacer" style="flex:1"></div>'+
+        '<button class="btn btn-sm btn-primary" data-act="comment-add">'+icon("i-send","ic-14")+'Comment</button>'+
+      '</div></div>';
+}
+
+function docsPane(t){
+  const ds=docsFor(t.id);
+  if(!ds.length)return '<div class="act-empty">No documents yet. They are saved as markdown, so your vault can read them.</div>'+
+    '<div class="composer"><button class="btn btn-sm" data-act="doc-new">'+icon("i-plus","ic-14")+'New document</button></div>';
+  return '<div class="doclist">'+ds.map(d=>
+      '<button class="doccard" data-act="doc-open" data-id="'+d.id+'">'+icon("i-doc","ic-14")+
+      '<span class="dc-t">'+esc(d.title)+'</span>'+
+      '<span class="dc-m">'+esc(relTime(d.updated))+'</span></button>').join("")+'</div>'+
+    '<div class="composer"><button class="btn btn-sm" data-act="doc-new">'+icon("i-plus","ic-14")+'New document</button></div>';
+}
+
+function renderSheet(){
+  const root=el("sheetRoot");if(!root)return;
+  const s=V.sheet;
+  if(!s){root.innerHTML="";document.body.classList.remove("sheet-open");return;}
+  const t=sheetTask();
+  if(!t){root.innerHTML="";document.body.classList.remove("sheet-open");V.sheet=null;return;}
+  document.body.classList.add("sheet-open");
+  const isNew=!s.id,c=cat(t.cat),done=t.status==="completed";
+  const subs=t.subtasks||[],dn=subs.filter(x=>x.d).length;
+
+  root.innerHTML='<div class="sheet-scrim" data-act="sheet-close"></div>'+
+  '<aside class="sheet" role="dialog" aria-modal="true" aria-label="Task detail">'+
+    '<header class="sh-head">'+
+      '<button class="tick'+(done?" on":"")+'" data-act="sh-done" aria-label="Mark complete"'+(isNew?" disabled":"")+'>'+icon("i-check")+'</button>'+
+      '<select class="inp inp-sm sh-status" data-act="sh-set" data-k="status">'+
+        STATUSES.map(x=>'<option value="'+x.id+'"'+(t.status===x.id?" selected":"")+'>'+esc(x.name)+'</option>').join("")+'</select>'+
+      '<div class="spacer" style="flex:1"></div>'+
+      (isNew?"":'<button class="icon-btn btn-sm" data-act="sh-timer" data-mode="countdown" title="Start the timer" aria-label="Start the timer">'+icon(running()&&running().task===t.id&&running().since?"i-pause":"i-play","ic-14")+'</button>')+
+      (isNew?"":'<button class="icon-btn btn-sm btn-danger" data-act="sh-delete" title="Delete" aria-label="Delete task">'+icon("i-trash","ic-14")+'</button>')+
+      '<button class="icon-btn btn-sm" data-act="sheet-close" aria-label="Close">'+icon("i-x","ic-14")+'</button>'+
+    '</header>'+
+
+    '<div class="sh-body">'+
+      '<input class="sh-title" id="shTitle" value="'+esc(t.title)+'" placeholder="What needs doing?" data-act="sh-set" data-k="title">'+
+
+      '<div class="mgrid">'+
+        metaRow("Dates",'<div class="dpair">'+
+          '<input class="inp inp-sm" type="date" value="'+esc(tStart(t))+'" data-act="sh-set" data-k="start" aria-label="Start date">'+
+          '<span class="arrow">'+icon("i-chev-r","ic-14")+'</span>'+
+          '<input class="inp inp-sm" type="date" value="'+esc(t.due||"")+'" data-act="sh-set" data-k="due" aria-label="Due date">'+
+          '</div>',"i-calendar")+
+        metaRow("Category",'<select class="inp inp-sm" data-act="sh-set" data-k="cat">'+
+          S.categories.map(x=>'<option value="'+x.id+'"'+(t.cat===x.id?" selected":"")+'>'+esc(x.name)+'</option>').join("")+'</select>',c.icon)+
+        metaRow("Priority",sheetPrio(t),"i-flag")+
+        metaRow("Estimate",'<input class="inp inp-sm est-in" type="number" min="0" step="5" value="'+(tEst(t)||"")+'" placeholder="minutes" data-act="sh-set" data-k="est" aria-label="Time estimate in minutes">',"i-timer")+
+        metaRow("Time",sheetTime(t,isNew),"i-clock")+
+        metaRow("Tags",sheetTags(t),"i-tag")+
+        metaRow("Linked",sheetLinks(t,isNew),"i-link")+
+        metaRow("Files",sheetFiles(t,isNew),"i-clip")+
+      '</div>'+
+
+      '<div class="sh-sec"><label class="sec-label">Description</label>'+
+        '<textarea class="inp" id="shDesc" rows="3" placeholder="Any detail worth keeping" data-act="sh-set" data-k="desc">'+esc(t.desc||"")+'</textarea></div>'+
+
+      '<div class="sh-sec"><label class="sec-label">Subtasks'+(subs.length?' <span class="num">'+dn+'/'+subs.length+'</span>':"")+'</label>'+
+        '<div id="shSubs">'+subs.map(x=>subRow(x)).join("")+'</div>'+
+        '<button class="btn btn-sm" data-act="sh-sub-add" style="margin-top:8px">'+icon("i-plus","ic-14")+'Add subtask</button></div>'+
+
+      (isNew
+        ? '<div class="sh-create"><button class="btn btn-primary" data-act="sh-create">'+icon("i-check")+'Create task</button>'+
+          '<span class="mnone">Comments, documents and the timer open up once it exists.</span></div>'
+        : '<div class="sh-sec sh-tabs-wrap">'+
+            '<div class="seg sh-tabs">'+
+              '<button data-act="sh-tab" data-v="activity" aria-pressed="'+(s.tab==="activity")+'">'+icon("i-chat","ic-14")+'Activity</button>'+
+              '<button data-act="sh-tab" data-v="docs" aria-pressed="'+(s.tab==="docs")+'">'+icon("i-doc","ic-14")+'Documents'+(docsFor(t.id).length?' <span class="num">'+docsFor(t.id).length+'</span>':"")+'</button>'+
+            '</div>'+
+            (s.tab==="docs"?docsPane(t):activityFeed(t))+
+          '</div>')+
+    '</div>'+
+  '</aside>';
+}
+
+/* ---- document editor ---- */
+function docModal(id,taskId){
+  const d=id?docById(id):null;
+  openModal('<div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Document">'+
+    '<div class="mhead2"><h2>'+(d?"Document":"New document")+'</h2>'+
+      (d?'<button class="btn btn-sm btn-ghost btn-danger" data-act="doc-del" data-id="'+d.id+'">'+icon("i-trash","ic-14")+'Delete</button>':"")+
+      '<button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div>'+
+    '<div class="mbody">'+
+      '<input class="inp doc-title" id="dcTitle" value="'+esc(d?d.title:"")+'" placeholder="Document title">'+
+      '<div class="doc-split">'+
+        '<textarea class="inp doc-md" id="dcMd" spellcheck="true" placeholder="# Heading&#10;&#10;Write in markdown. It is saved as a .md file.">'+esc(d?d.md:"")+'</textarea>'+
+        '<div class="doc-prev" id="dcPrev">'+mdToHtml(d?d.md:"")+'</div>'+
+      '</div>'+
+      '<p class="mnone">'+(vaultPath()?'Saved to your vault as '+esc(d?docFile(d):"a .md file"):'Saved inside the planner. Connect a vault in Settings to mirror it into Obsidian.')+'</p>'+
+    '</div>'+
+    '<div class="mfoot"><div class="spacer" style="flex:1"></div>'+
+      '<button class="btn" data-act="close">Cancel</button>'+
+      '<button class="btn btn-primary" data-act="doc-save" data-id="'+(d?d.id:"")+'" data-task="'+esc(taskId||(d?d.task:""))+'">'+icon("i-check")+'Save</button>'+
+    '</div></div>');
+}
+
+
+/* ============ the desktop bridge ============ */
+/* main.js exposes window.orbit through a preload script. In a plain browser
+   it is absent, so every one of these is a no-op and the features that need
+   a real filesystem or a floating window simply do not appear. */
+const desktop=()=>(typeof window!=="undefined"&&window.orbit)||null;
+const hasDesktop=()=>!!desktop();
+const vaultPath=()=>(S.prefs&&S.prefs.vault)||"";
+
+function pushDocToVault(d){
+  const o=desktop();if(!o||!vaultPath()||!d)return;
+  try{o.writeDoc({file:docFile(d),body:docFileBody(d),id:d.id});}catch(e){}
+}
+function removeDocFromVault(d){
+  const o=desktop();if(!o||!vaultPath()||!d)return;
+  try{o.deleteDoc({file:docFile(d),id:d.id});}catch(e){}
+}
+function syncTimerWindow(){
+  const o=desktop();if(!o||!o.timer)return;
+  const r=running();
+  if(!r){try{o.timer({state:"idle"});}catch(e){}return;}
+  const t=taskById(r.task);if(!t)return;
+  const est=tEst(t)*60,secs=liveSecs();
+  try{o.timer({state:r.since?"running":"paused",title:t.title,mode:r.mode,
+    secs:secs,est:est,colour:cat(t.cat).color,over:r.mode==="countdown"&&est>0&&secs>est});}catch(e){}
+}
+
+/* ============ time analytics ============ */
+const RANGES=[{id:"week",name:"This week"},{id:"7",name:"Last 7 days"},{id:"month",name:"This month"},{id:"all",name:"Everything"}];
+
+function rangeStart(id){
+  if(id==="week")return startOfWeek(today());
+  if(id==="7")return addDays(today(),-6);
+  if(id==="month")return new Date(today().getFullYear(),today().getMonth(),1);
+  return new Date(1970,0,1);
+}
+function sessionsIn(id){
+  const from=rangeStart(id).getTime();
+  return S.sessions.filter(s=>s.start>=from&&visibleCat((taskById(s.task)||{}).cat));
+}
+/* A bar row, used for both the category and the task breakdown. */
+function barRow(label,secs,max,colour,right){
+  const w=max?Math.max(1.5,secs/max*100):0;
+  return '<div class="brow"><div class="blab">'+label+'</div>'+
+    '<div class="btrack"><div class="bfill" style="width:'+w.toFixed(1)+'%;--c:'+(colour||"var(--accent)")+'"></div></div>'+
+    '<div class="bval num">'+esc(right||fmtDur(secs))+'</div></div>';
+}
+
+function viewTime(){
+  const r=V.range||"week",ss=sessionsIn(r);
+  const total=ss.reduce((n,s)=>n+s.secs,0);
+  const taskIds=[];ss.forEach(s=>{if(taskIds.indexOf(s.task)===-1)taskIds.push(s.task);});
+
+  /* by category */
+  const byCat={};ss.forEach(s=>{const t=taskById(s.task);if(!t)return;byCat[t.cat]=(byCat[t.cat]||0)+s.secs;});
+  const catRows=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
+  const catMax=catRows.length?byCat[catRows[0]]:0;
+
+  /* by task, with the estimate alongside so over-runs are obvious */
+  const byTask={};ss.forEach(s=>{byTask[s.task]=(byTask[s.task]||0)+s.secs;});
+  const taskRows=Object.keys(byTask).sort((a,b)=>byTask[b]-byTask[a]).slice(0,12);
+  const taskMax=taskRows.length?byTask[taskRows[0]]:0;
+
+  /* by day across the range */
+  const days=[],from=rangeStart(r),span=r==="all"
+    ? Math.min(30,Math.max(1,Math.round((Date.now()-(ss.length?Math.min.apply(null,ss.map(s=>s.start)):Date.now()))/864e5)+1))
+    : Math.round((today()-from)/864e5)+1;
+  for(let i=span-1;i>=0;i--){const d=addDays(today(),-i),k=ymd(d);
+    days.push({k:k,d:d,secs:ss.reduce((n,s)=>n+(ymd(new Date(s.start))===k?s.secs:0),0)});}
+  const dayMax=Math.max.apply(null,days.map(d=>d.secs).concat([1]));
+
+  const estTotal=taskIds.reduce((n,id)=>{const t=taskById(id);return n+(t?tEst(t)*60:0);},0);
+
+  const tiles='<div class="tiles">'+
+    '<div class="tile"><span class="tl">Tracked</span><b class="num">'+fmtDur(total)+'</b></div>'+
+    '<div class="tile"><span class="tl">Sessions</span><b class="num">'+ss.length+'</b></div>'+
+    '<div class="tile"><span class="tl">Tasks worked</span><b class="num">'+taskIds.length+'</b></div>'+
+    '<div class="tile"><span class="tl">Estimated</span><b class="num">'+(estTotal?fmtDur(estTotal):"—")+'</b></div>'+
+    '</div>';
+
+  const dayChart='<div class="card pad"><h3 class="sec-label">By day</h3><div class="daybars">'+
+    days.map(d=>'<div class="dbar" title="'+esc(fmtDate(d.k)+" · "+fmtDur(d.secs))+'">'+
+      '<div class="dbar-track"><div class="dbar-fill" style="height:'+(d.secs/dayMax*100).toFixed(1)+'%"></div></div>'+
+      '<span class="dbar-lab">'+(span<=14?DOWS[(d.d.getDay()+6)%7].slice(0,1):(d.d.getDate()%5===0?d.d.getDate():""))+'</span></div>').join("")+
+    '</div></div>';
+
+  const catCard='<div class="card pad"><h3 class="sec-label">By category</h3>'+
+    (catRows.length?catRows.map(id=>barRow(icon(cat(id).icon,"ic-14")+esc(cat(id).name),byCat[id],catMax,cat(id).color)).join("")
+      :'<p class="mnone">Nothing tracked in this range.</p>')+'</div>';
+
+  const taskCard='<div class="card pad"><h3 class="sec-label">By task</h3>'+
+    (taskRows.length?taskRows.map(id=>{const t=taskById(id);if(!t)return "";
+        const est=tEst(t)*60,over=est&&byTask[id]>est;
+        return barRow('<button class="lk lk-inline" data-act="task" data-id="'+id+'">'+esc(t.title)+'</button>',
+          byTask[id],taskMax,cat(t.cat).color,
+          fmtDur(byTask[id])+(est?(over?" · over "+fmtDur(byTask[id]-est):" of "+fmtDur(est)):""));}).join("")
+      :'<p class="mnone">Nothing tracked in this range.</p>')+'</div>';
+
+  const recent=ss.slice().sort((a,b)=>b.start-a.start).slice(0,14);
+  const log='<div class="card pad"><h3 class="sec-label">Recent sessions</h3>'+
+    (recent.length?'<div class="slist">'+recent.map(s=>{const t=taskById(s.task);
+        return '<div class="srow"><span class="sdot" style="--c:'+(t?cat(t.cat).color:"var(--faint)")+'"></span>'+
+          '<span class="stitle">'+esc(t?t.title:"Deleted task")+'</span>'+
+          '<span class="smode">'+esc(s.mode==="countdown"?"Blitz":"Stopwatch")+'</span>'+
+          '<span class="swhen">'+esc(relTime(s.start))+'</span>'+
+          '<span class="ssecs num">'+fmtDur(s.secs)+'</span></div>';}).join("")+'</div>'
+      :'<p class="mnone">No sessions yet. Start a timer from any task.</p>')+'</div>';
+
+  return '<div class="an">'+
+    '<div class="seg an-range">'+RANGES.map(x=>'<button data-act="an-range" data-v="'+x.id+'" aria-pressed="'+(r===x.id)+'">'+esc(x.name)+'</button>').join("")+'</div>'+
+    tiles+dayChart+'<div class="an-two">'+catCard+taskCard+'</div>'+log+'</div>';
+}
+
+
 const hadLocal=loadLocal();
 render();
 if(hadLocal)saveLocal();
+
+/* A document edited inside Obsidian arrives here. The planner never writes
+   back in response, so the two sides cannot ping-pong. */
+function applyVaultChange(d){
+  if(!d||!d.id)return;
+  const doc=docById(d.id);if(!doc)return;
+  const sameText=doc.md===d.md,sameTitle=!d.title||doc.title===d.title;
+  if(sameText&&sameTitle)return;
+  doc.md=d.md;
+  if(d.title)doc.title=d.title;
+  doc.updated=Date.now();
+  save("docs");
+  logAct(doc.task,"doc-edit","Updated “"+doc.title+"” from the vault",{doc:doc.id});
+  renderSheet();
+  toast("Updated “"+doc.title+"” from your vault");
+}
+
+(function bindDesktop(){
+  const o=desktop();if(!o)return;
+  if(o.onTimerCmd)o.onTimerCmd(function(d){
+    if(!d||!d.cmd)return;
+    const r=running();
+    if(d.cmd==="toggle"&&r)toggleTimer(r.task);
+    else if(d.cmd==="stop")stopTimer();
+  });
+  if(o.onVaultChange)o.onVaultChange(applyVaultChange);
+  /* Keep the shell in step with the path the planner remembers. */
+  if(o.useVault&&vaultPath())try{o.useVault(vaultPath());}catch(e){}
+})();
+
 /* In the hosted copy, wait for the cloud check before offering a fresh start,
    so a slow connection can never invite someone to overwrite existing data. */
 if(window.claude&&window.claude.use)connect().then(maybeWelcome,maybeWelcome);
 else{maybeWelcome();connect();}
 setInterval(()=>{if(V.view==="calendar"&&V.calMode==="week"&&!el("modalRoot").innerHTML)renderView();},60000);
+
+/* The clock ticks in place. A full render every second would fight anything
+   being typed, so only the two readouts are touched. */
+setInterval(function(){
+  const r=running();
+  if(!r||!r.since)return;
+  const t=taskById(r.task);if(!t)return;
+  const secs=liveSecs(),est=tEst(t)*60;
+  const over=r.mode==="countdown"&&est&&secs>est;
+  const bar=document.querySelector(".tbar-time");
+  if(bar){
+    bar.textContent=(over?"+":"")+fmtDur(r.mode==="countdown"&&est?Math.abs(est-secs):secs);
+    const wrap=bar.closest(".tbar");if(wrap)wrap.classList.toggle("over",!!over);
+  }
+  const read=document.querySelector(".tm-read b");
+  if(read&&V.sheet&&V.sheet.id===r.task)read.textContent=fmtDur(trackedSecs(r.task)+secs);
+  syncTimerWindow();
+},1000);
+
+/* A timer left running when the app closed keeps its accumulated seconds but
+   does not keep counting through time the app was not open. */
+(function resumeTimer(){
+  const r=running();
+  if(r&&r.since){S.prefs.running=Object.assign({},r,{acc:liveSecs(),since:0});save("prefs");}
+  syncTimerWindow();
+})();
 })();

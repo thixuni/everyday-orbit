@@ -1,8 +1,13 @@
 # Everyday Orbit
 
-A personal planner: calendar, task board, Eisenhower matrix, routines and notes.
-Five views over one set of tasks, sharing one set of categories that work like
-calendar layers.
+A personal planner: calendar, task board, Eisenhower matrix, routines, notes and
+time tracking. Six views over one set of tasks, sharing one set of categories
+that work like calendar layers.
+
+Open any task and a panel slides in from the right with its dates, priority,
+tags, linked tasks, files, an estimate, a timer and a full history of everything
+that has happened to it. Comments and documents live in that history; documents
+are markdown, so they can be mirrored straight into an Obsidian vault.
 
 Everything is stored on your own computer. There is no account and no server.
 
@@ -43,9 +48,11 @@ Then visit <http://localhost:4173>.
 
 ```
 src/index.html   Page shell, the SVG icon sprite, and the app markup
+src/timer.html   The floating timer window
 src/app.css      Every style. All colours are tokens on :root
 src/app.js       The whole application, in one IIFE
-main.js          Electron shell: window, menu, backup/restore, updates
+main.js          Electron shell: windows, menu, vault sync, backups, updates
+preload.js       The only bridge between the app and the shell
 scripts/         build-standalone.js (the single file), serve.js (dev server)
 test/            Guards for the conventions in CLAUDE.md
 docs/            The download page, served by GitHub Pages
@@ -111,6 +118,31 @@ macOS build will fail.
 Costs, roughly: an OV Windows certificate is 200–400 USD a year (EV clears
 SmartScreen immediately, and costs more); the Apple Developer Programme is
 99 USD a year.
+
+## Time tracking
+
+Give a task an estimate and press **Blitz it**: the timer counts down, and keeps
+counting once it passes zero so overtime is visible rather than hidden. For work
+you cannot estimate, **Stopwatch** counts up instead. Either way each run is
+stored as a session, and the **Time** view breaks those sessions down by day, by
+category and by task, with estimate against actual.
+
+**View ▸ Floating timer** (or the pop-out button on the timer strip) opens a
+small always-on-top window that stays above other apps while you work, with
+pause and stop on it. That window is desktop only — a browser tab cannot float
+above anything else.
+
+## Documents and Obsidian
+
+Any task can hold documents, written in markdown with a live preview. Connect a
+vault in **Settings ▸ Obsidian vault** and each one is mirrored to
+`<vault>/Everyday Orbit/` as a `.md` file with YAML front matter. Edits you make
+in Obsidian flow back into the planner, and edits made here are written out —
+the planner never writes back in response to a change it just read, so the two
+sides cannot loop.
+
+Vault sync is desktop only, for the same reason: a browser tab has no access to
+a folder on your disk.
 
 ## Backups
 
