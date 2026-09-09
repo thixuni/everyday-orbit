@@ -1031,6 +1031,7 @@ document.addEventListener("click",function(e){
     case "sheet-close":closeSheet();break;
     case "sh-create":createFromDraft();break;
     case "sh-tab":V.sheet.tab=n.dataset.v;renderSheet();break;
+    case "feed-quiet":V.sheet.quiet=!V.sheet.quiet;renderSheet();break;
     case "sh-done":{const t=sheetTask();if(t&&V.sheet.id)toggleTaskDone(t.id),renderSheet();break;}
     case "sh-delete":if(arm(n,"Delete for good?"))deleteTask(V.sheet.id);break;
     case "sh-flag":{const t=sheetTask();if(!t)break;
@@ -1286,8 +1287,32 @@ function logChanges(id,before,after){
     if(k==="subtasks"||k==="attachments"){
       if((before[k]||[]).length===(after[k]||[]).length)return;   // ticking a subtask is not a field change
     }
-    logAct(id,"field",FIELD_LABEL[k]+": "+fieldText(k,before[k])+" → "+fieldText(k,after[k]),{f:k});
+    logField(id,k,before[k],after[k]);
   });
+}
+
+/* Still-warm edits to the same field fold into the entry already there, so a
+   run of fiddling reads as one change. Land back where you started and the
+   entry goes away entirely rather than recording a round trip. */
+const FOLD_MS=10*60*1000;
+function logField(id,k,from,to){
+  const now=Date.now();
+  let prev=null;
+  for(let i=S.activity.length-1;i>=0;i--){
+    const a=S.activity[i];
+    if(a.task!==id||now-a.at>FOLD_MS)continue;
+    if(a.kind==="field"&&a.meta&&a.meta.f===k){prev=a;break;}
+  }
+  if(prev){
+    if(sameVal(prev.meta.from,to)){
+      S.activity=S.activity.filter(a=>a.id!==prev.id);
+      save("activity");return;
+    }
+    prev.meta.to=to;prev.at=now;
+    prev.text=FIELD_LABEL[k]+": "+fieldText(k,prev.meta.from)+" → "+fieldText(k,to);
+    save("activity");return;
+  }
+  logAct(id,"field",FIELD_LABEL[k]+": "+fieldText(k,from)+" → "+fieldText(k,to),{f:k,from:from,to:to});
 }
 
 /* ============ time tracking ============ */
@@ -1576,19 +1601,41 @@ function relTime(ms){
 }
 
 function activityFeed(t){
-  const items=actFor(t.id);
+  const quiet=!!(V.sheet&&V.sheet.quiet);
   const who=(S.prefs&&S.prefs.owner)||"You";
-  const body=items.length?items.map(a=>{
-    if(a.kind==="comment")
-      return '<div class="act act-comment"><div class="act-top"><b>'+esc(who)+'</b><span>'+esc(relTime(a.at))+'</span>'+
-        '<button class="rowx" data-act="act-del" data-id="'+a.id+'" aria-label="Delete comment">'+icon("i-x","ic-14")+'</button></div>'+
-        '<div class="act-body">'+mdToHtml(a.text)+'</div></div>';
+  const all=actFor(t.id);
+  const noise=all.filter(a=>a.kind==="field").length;
+  const items=quiet?all.filter(a=>a.kind!=="field"):all;
+
+  /* Runs of bookkeeping that happened at the same moment become one block
+     under one timestamp, instead of a stack of near-identical rows. */
+  const blocks=[];
+  items.forEach(a=>{
+    if(a.kind==="comment"){blocks.push({t:"c",a:a});return;}
+    const when=relTime(a.at),last=blocks[blocks.length-1];
+    if(last&&last.t==="e"&&last.when===when)last.list.push(a);
+    else blocks.push({t:"e",when:when,list:[a]});
+  });
+
+  const evtLine=a=>{
     const d=a.meta&&a.meta.doc?docById(a.meta.doc):null;
-    return '<div class="act act-evt">'+icon(ACT_ICON[a.kind]||"i-dot-grid","ic-14")+
-      '<span class="act-text">'+(d?'<button class="lk lk-inline" data-act="doc-open" data-id="'+d.id+'">'+esc(a.text)+'</button>':esc(a.text))+'</span>'+
-      '<span class="act-when">'+esc(relTime(a.at))+'</span></div>';
-  }).join(""):'<div class="act-empty">Nothing yet. Comments and changes will show up here.</div>';
-  return '<div class="feed">'+body+'</div>'+
+    const text=d?'<button class="lk lk-inline" data-act="doc-open" data-id="'+d.id+'">'+esc(a.text)+'</button>':esc(a.text);
+    return '<div class="ag-line">'+icon(ACT_ICON[a.kind]||"i-dot-grid","ic-14")+'<span>'+text+'</span></div>';
+  };
+
+  const body=blocks.length?blocks.map(b=>
+    b.t==="c"
+      ? '<div class="act act-comment"><div class="act-top"><b>'+esc(who)+'</b><span>'+esc(relTime(b.a.at))+'</span>'+
+        '<button class="rowx" data-act="act-del" data-id="'+b.a.id+'" aria-label="Delete comment">'+icon("i-x","ic-14")+'</button></div>'+
+        '<div class="act-body">'+mdToHtml(b.a.text)+'</div></div>'
+      : '<div class="act-group"><div class="ag-when">'+esc(b.when)+'</div><div class="ag-lines">'+
+        b.list.map(evtLine).join("")+'</div></div>'
+  ).join(""):'<div class="act-empty">'+(quiet?"No comments or documents yet.":"Nothing yet. Comments and changes will show up here.")+'</div>';
+
+  const toggle=noise?'<button class="feed-toggle" data-act="feed-quiet">'+
+    (quiet?"Show "+noise+" change"+(noise===1?"":"s"):"Hide changes")+'</button>':"";
+
+  return '<div class="feed-head">'+toggle+'</div><div class="feed">'+body+'</div>'+
     '<div class="composer">'+
       '<textarea class="inp" id="shComment" rows="2" placeholder="Write a comment… markdown works"></textarea>'+
       '<div class="composer-foot">'+
