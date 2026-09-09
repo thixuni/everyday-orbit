@@ -167,9 +167,11 @@ Three parts, `1.2.3`. Only the last two move:
 - **A major change** — a new view, a feature people would notice and talk
   about — bumps the middle number and resets the last to zero: 1.2.0.
 
-Bump it when the work lands, not only when it is released. The number is how
-an installed copy decides whether a build is newer than the one it is running,
-so two different builds must never share one.
+**Bump it as part of pushing to GitHub, and only then.** Local commits do not
+move the number — work as many commits as you like, then raise it once when the
+push goes out, so one push is one version. The number is how an installed copy
+decides whether a build is newer than the one it is running, so two pushes must
+never share one.
 
 ## Releasing
 
