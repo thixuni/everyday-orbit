@@ -158,6 +158,19 @@ property reads as stuck at its start value and `getComputedStyle` lies about it.
 Check `element.getAnimations()` before concluding a rule is broken, or measure
 with `style.transition = "none"`.
 
+## Version numbers
+
+Three parts, `1.2.3`. Only the last two move:
+
+- **Ordinary work** — a fix, a refinement, a small addition — bumps the last
+  number. 1.1.2, 1.1.3, 1.1.4, and so on.
+- **A major change** — a new view, a feature people would notice and talk
+  about — bumps the middle number and resets the last to zero: 1.2.0.
+
+Bump it when the work lands, not only when it is released. The number is how
+an installed copy decides whether a build is newer than the one it is running,
+so two different builds must never share one.
+
 ## Releasing
 
 Bump `version` in `package.json`, then push a `v*` tag. The workflow runs the
