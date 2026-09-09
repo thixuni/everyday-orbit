@@ -491,8 +491,8 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .sh-sec .sec-label{display:block;margin-bottom:7px}
 .sh-sec .sec-label .num{color:var(--faint);font-weight:600}
 .sh-create{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding-top:6px;border-top:1px solid var(--line)}
-.sh-tabs-wrap{border-top:1px solid var(--line);padding-top:14px}
-.sh-tabs{margin-bottom:12px;display:inline-flex}
+.sh-tabs{margin:0 0 16px;display:inline-flex}
+.sh-tabs .num{color:var(--faint);font-weight:600}
 
 /* ---------- activity feed ---------- */
 .feed{display:flex;flex-direction:column;gap:9px;margin-bottom:12px}
@@ -500,9 +500,6 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 
 /* Bookkeeping recedes: one timestamp per run, in a gutter, so the eye runs
    down the comments and only picks up changes when it wants them. */
-.feed-head{display:flex;justify-content:flex-end;margin-bottom:6px;min-height:18px}
-.feed-toggle{font-size:11.5px;font-weight:600;color:var(--muted);padding:2px 6px;border-radius:6px}
-.feed-toggle:hover{background:var(--surface-3);color:var(--ink)}
 .act-group{display:grid;grid-template-columns:66px minmax(0,1fr);gap:9px;padding:2px 0}
 .ag-when{font-size:11px;color:var(--faint);padding-top:2px;text-align:right}
 .ag-lines{display:flex;flex-direction:column;gap:2px;min-width:0}

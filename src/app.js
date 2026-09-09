@@ -1031,7 +1031,6 @@ document.addEventListener("click",function(e){
     case "sheet-close":closeSheet();break;
     case "sh-create":createFromDraft();break;
     case "sh-tab":V.sheet.tab=n.dataset.v;renderSheet();break;
-    case "feed-quiet":V.sheet.quiet=!V.sheet.quiet;renderSheet();break;
     case "sh-done":{const t=sheetTask();if(t&&V.sheet.id)toggleTaskDone(t.id),renderSheet();break;}
     case "sh-delete":if(arm(n,"Delete for good?"))deleteTask(V.sheet.id);break;
     case "sh-flag":{const t=sheetTask();if(!t)break;
@@ -1480,7 +1479,7 @@ function deleteDoc(id){
 
 function openSheet(id,preset){
   if(id&&!taskById(id))return;
-  V.sheet={id:id||null,tab:"activity",
+  V.sheet={id:id||null,tab:"details",
     draft:id?null:Object.assign({title:"",desc:"",due:"",start:"",cat:S.categories[0].id,
       status:"backlog",urgent:null,important:null,est:0,tags:[],links:[],subtasks:[],attachments:[]},preset||{})};
   renderSheet();
@@ -1600,60 +1599,61 @@ function relTime(ms){
   return fmtDate(ymd(dt))+" at "+fmtTime(pad(dt.getHours())+":"+pad(dt.getMinutes()));
 }
 
-function activityFeed(t){
-  const quiet=!!(V.sheet&&V.sheet.quiet);
+/* Documents sit with the task's working material, not its history. */
+const histCount=t=>S.activity.reduce((n,a)=>n+(a.task===t.id&&a.kind!=="comment"?1:0),0);
+
+function docsSection(t,isNew){
+  if(isNew)return "";
+  const ds=docsFor(t.id);
+  return '<div class="sh-sec"><label class="sec-label">Documents'+(ds.length?' <span class="num">'+ds.length+'</span>':"")+'</label>'+
+    (ds.length?'<div class="doclist">'+ds.map(d=>
+      '<button class="doccard" data-act="doc-open" data-id="'+d.id+'">'+icon("i-doc","ic-14")+
+      '<span class="dc-t">'+esc(d.title)+'</span>'+
+      '<span class="dc-m">'+esc(relTime(d.updated))+'</span></button>').join("")+'</div>'
+      :'<p class="mnone" style="margin:0 0 8px">Markdown, so your vault can read them.</p>')+
+    '<button class="btn btn-sm" data-act="doc-new">'+icon("i-plus","ic-14")+'New document</button></div>';
+}
+
+/* Comments live with the details, where the work is. */
+function commentsPane(t,isNew){
+  if(isNew)return "";
   const who=(S.prefs&&S.prefs.owner)||"You";
-  const all=actFor(t.id);
-  const noise=all.filter(a=>a.kind==="field").length;
-  const items=quiet?all.filter(a=>a.kind!=="field"):all;
+  const list=actFor(t.id).filter(a=>a.kind==="comment");
+  return '<div class="sh-sec"><label class="sec-label">Comments'+(list.length?' <span class="num">'+list.length+'</span>':"")+'</label>'+
+    (list.length?'<div class="feed">'+list.map(a=>
+      '<div class="act act-comment"><div class="act-top"><b>'+esc(who)+'</b><span>'+esc(relTime(a.at))+'</span>'+
+      '<button class="rowx" data-act="act-del" data-id="'+a.id+'" aria-label="Delete comment">'+icon("i-x","ic-14")+'</button></div>'+
+      '<div class="act-body">'+mdToHtml(a.text)+'</div></div>').join("")+'</div>':"")+
+    '<div class="composer">'+
+      '<textarea class="inp" id="shComment" rows="2" placeholder="Write a comment… markdown works"></textarea>'+
+      '<div class="composer-foot">'+
+        '<span class="mnone">Ctrl+Enter to post</span>'+
+        '<div class="spacer" style="flex:1"></div>'+
+        '<button class="btn btn-sm btn-primary" data-act="comment-add">'+icon("i-send","ic-14")+'Comment</button>'+
+      '</div></div></div>';
+}
+
+/* The history: what happened to the task, without the conversation. */
+function historyPane(t){
+  const items=actFor(t.id).filter(a=>a.kind!=="comment");
+  if(!items.length)return '<div class="act-empty">Nothing has happened to this task yet.</div>';
 
   /* Runs of bookkeeping that happened at the same moment become one block
      under one timestamp, instead of a stack of near-identical rows. */
   const blocks=[];
   items.forEach(a=>{
-    if(a.kind==="comment"){blocks.push({t:"c",a:a});return;}
     const when=relTime(a.at),last=blocks[blocks.length-1];
-    if(last&&last.t==="e"&&last.when===when)last.list.push(a);
-    else blocks.push({t:"e",when:when,list:[a]});
+    if(last&&last.when===when)last.list.push(a);
+    else blocks.push({when:when,list:[a]});
   });
-
-  const evtLine=a=>{
+  const line=a=>{
     const d=a.meta&&a.meta.doc?docById(a.meta.doc):null;
     const text=d?'<button class="lk lk-inline" data-act="doc-open" data-id="'+d.id+'">'+esc(a.text)+'</button>':esc(a.text);
     return '<div class="ag-line">'+icon(ACT_ICON[a.kind]||"i-dot-grid","ic-14")+'<span>'+text+'</span></div>';
   };
-
-  const body=blocks.length?blocks.map(b=>
-    b.t==="c"
-      ? '<div class="act act-comment"><div class="act-top"><b>'+esc(who)+'</b><span>'+esc(relTime(b.a.at))+'</span>'+
-        '<button class="rowx" data-act="act-del" data-id="'+b.a.id+'" aria-label="Delete comment">'+icon("i-x","ic-14")+'</button></div>'+
-        '<div class="act-body">'+mdToHtml(b.a.text)+'</div></div>'
-      : '<div class="act-group"><div class="ag-when">'+esc(b.when)+'</div><div class="ag-lines">'+
-        b.list.map(evtLine).join("")+'</div></div>'
-  ).join(""):'<div class="act-empty">'+(quiet?"No comments or documents yet.":"Nothing yet. Comments and changes will show up here.")+'</div>';
-
-  const toggle=noise?'<button class="feed-toggle" data-act="feed-quiet">'+
-    (quiet?"Show "+noise+" change"+(noise===1?"":"s"):"Hide changes")+'</button>':"";
-
-  return '<div class="feed-head">'+toggle+'</div><div class="feed">'+body+'</div>'+
-    '<div class="composer">'+
-      '<textarea class="inp" id="shComment" rows="2" placeholder="Write a comment… markdown works"></textarea>'+
-      '<div class="composer-foot">'+
-        '<button class="btn btn-sm" data-act="doc-new">'+icon("i-doc","ic-14")+'New document</button>'+
-        '<div class="spacer" style="flex:1"></div>'+
-        '<button class="btn btn-sm btn-primary" data-act="comment-add">'+icon("i-send","ic-14")+'Comment</button>'+
-      '</div></div>';
-}
-
-function docsPane(t){
-  const ds=docsFor(t.id);
-  if(!ds.length)return '<div class="act-empty">No documents yet. They are saved as markdown, so your vault can read them.</div>'+
-    '<div class="composer"><button class="btn btn-sm" data-act="doc-new">'+icon("i-plus","ic-14")+'New document</button></div>';
-  return '<div class="doclist">'+ds.map(d=>
-      '<button class="doccard" data-act="doc-open" data-id="'+d.id+'">'+icon("i-doc","ic-14")+
-      '<span class="dc-t">'+esc(d.title)+'</span>'+
-      '<span class="dc-m">'+esc(relTime(d.updated))+'</span></button>').join("")+'</div>'+
-    '<div class="composer"><button class="btn btn-sm" data-act="doc-new">'+icon("i-plus","ic-14")+'New document</button></div>';
+  return '<div class="feed">'+blocks.map(b=>
+    '<div class="act-group"><div class="ag-when">'+esc(b.when)+'</div>'+
+    '<div class="ag-lines">'+b.list.map(line).join("")+'</div></div>').join("")+'</div>';
 }
 
 function renderSheet(){
@@ -1681,7 +1681,12 @@ function renderSheet(){
     '<div class="sh-body">'+
       '<input class="sh-title" id="shTitle" value="'+esc(t.title)+'" placeholder="What needs doing?" data-act="sh-set" data-k="title">'+
 
-      '<div class="sh-meta">'+
+      (isNew?"":'<div class="seg sh-tabs">'+
+        '<button data-act="sh-tab" data-v="details" aria-pressed="'+(s.tab!=="activity")+'">'+icon("i-list","ic-14")+'Details</button>'+
+        '<button data-act="sh-tab" data-v="activity" aria-pressed="'+(s.tab==="activity")+'">'+icon("i-clock","ic-14")+'Activity'+
+          (histCount(t)?' <span class="num">'+histCount(t)+'</span>':"")+'</button></div>')+
+
+      (s.tab==="activity"?historyPane(t):'<div class="sh-meta">'+
         metaRow("Dates",'<div class="dpair">'+
           '<input class="inp inp-sm" type="date" value="'+esc(tStart(t))+'" data-act="sh-set" data-k="start" aria-label="Start date">'+
           '<span class="arrow">'+icon("i-chev-r","ic-14")+'</span>'+
@@ -1703,17 +1708,11 @@ function renderSheet(){
       '<div class="sh-sec"><label class="sec-label">Subtasks'+(subs.length?' <span class="num">'+dn+'/'+subs.length+'</span>':"")+'</label>'+
         '<div id="shSubs">'+subs.map(x=>subRow(x)).join("")+'</div>'+
         '<button class="btn btn-sm" data-act="sh-sub-add" style="margin-top:8px">'+icon("i-plus","ic-14")+'Add subtask</button></div>'+
+      docsSection(t,isNew)+
+      commentsPane(t,isNew))+
 
-      (isNew
-        ? '<div class="sh-create"><button class="btn btn-primary" data-act="sh-create">'+icon("i-check")+'Create task</button>'+
-          '<span class="mnone">Comments, documents and the timer open up once it exists.</span></div>'
-        : '<div class="sh-sec sh-tabs-wrap">'+
-            '<div class="seg sh-tabs">'+
-              '<button data-act="sh-tab" data-v="activity" aria-pressed="'+(s.tab==="activity")+'">'+icon("i-chat","ic-14")+'Activity</button>'+
-              '<button data-act="sh-tab" data-v="docs" aria-pressed="'+(s.tab==="docs")+'">'+icon("i-doc","ic-14")+'Documents'+(docsFor(t.id).length?' <span class="num">'+docsFor(t.id).length+'</span>':"")+'</button>'+
-            '</div>'+
-            (s.tab==="docs"?docsPane(t):activityFeed(t))+
-          '</div>')+
+      (isNew?'<div class="sh-create"><button class="btn btn-primary" data-act="sh-create">'+icon("i-check")+'Create task</button>'+
+          '<span class="mnone">Comments, documents and the timer open up once it exists.</span></div>':"")+
     '</div>'+
   '</aside>';
 }
