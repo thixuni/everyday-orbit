@@ -42,7 +42,8 @@ Then visit <http://localhost:4173>.
 | `npm test` | Run the checks in `test/` |
 | `npm run build:html` | Inline `src/` into `dist/everyday-orbit.html` |
 | `npm run check` | Build the single file, then test |
-| `npm run build` | Build installers into `release/` |
+| `npm run build` | Build installers into `release/` (for testing only — never hand these out) |
+| `npm run release patch` | Cut a release: check, bump, tag, push |
 
 ## Layout
 
@@ -73,18 +74,22 @@ attached to every release. `scripts/build-standalone.js` produces it, and
 
 ## Cutting a release
 
-1. Bump `version` in `package.json`.
-2. Commit, then tag and push:
+One command, from a clean `main`:
 
-   ```bash
-   git tag v1.1.0
-   git push origin v1.1.0
-   ```
+```bash
+npm run release patch
+```
 
-3. The **Build installers** workflow runs the checks, builds on real Windows,
-   macOS and Linux machines, and publishes a GitHub Release with the installers,
-   the single-file build, and the `latest.yml` metadata that installed copies
-   read when they check for updates.
+Use `patch` for ordinary work — a fix, a refinement, a small addition — and
+`minor` for a major change, like a new view. The version number moves here and
+nowhere else, so every number that exists is one somebody can download.
+
+The command checks that the working tree is clean, that you are on `main` and
+up to date, and that the checks pass. It changes nothing until all of that
+holds, so a refusal is safe to retry. Then it raises the version, commits,
+tags and pushes, and the **Build installers** workflow publishes a GitHub
+Release with the installers for all three platforms, the single-file build,
+and the `latest.yml` metadata that installed copies read.
 
 Pressing **Run workflow** on the Actions tab builds without publishing, which is
 the way to test a change to the pipeline.

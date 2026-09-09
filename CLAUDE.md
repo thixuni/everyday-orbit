@@ -158,29 +158,40 @@ property reads as stuck at its start value and `getComputedStyle` lies about it.
 Check `element.getAnimations()` before concluding a rule is broken, or measure
 with `style.transition = "none"`.
 
-## Version numbers
-
-Three parts, `1.2.3`. Only the last two move:
-
-- **Ordinary work** — a fix, a refinement, a small addition — bumps the last
-  number. 1.1.2, 1.1.3, 1.1.4, and so on.
-- **A major change** — a new view, a feature people would notice and talk
-  about — bumps the middle number and resets the last to zero: 1.2.0.
-
-**Bump it as part of cutting a release, and only then.** Commits and pushes in
-between leave it alone, so every number that exists is one somebody can
-download and the releases page reads straight through with no gaps.
-
-That means several pushes share a version number between releases, which is
-harmless here: installers are only ever built by the release workflow from a
-`v*` tag, never by hand from `main`. Do not build installers locally and hand
-them to anyone — that is the one way two different builds could end up
-claiming the same number, and an installed copy decides whether an update is
-newer by comparing exactly that.
-
 ## Releasing
 
-Bump `version` in `package.json`, then push a `v*` tag. The workflow runs the
+**Never bump `version` by hand, and never push a tag by hand.** One command
+does the whole thing:
+
+```
+npm run release patch    # ordinary work: a fix, a refinement, a small addition
+npm run release minor    # a major change: a new view, something people notice
+```
+
+It refuses unless the working tree is clean, you are on `main`, you are up to
+date with origin, and the checks pass — and it changes nothing until every one
+of those holds, so a refusal is always safe to ignore and retry.
+
+Then it raises the version, commits, tags, and pushes. The workflow takes over
+from the tag and publishes the installers, the single-file build, and the
+`latest.yml` metadata that installed copies read.
+
+### Why the version only moves here
+
+The number moves during a release and at no other time. Commits and pushes in
+between leave it alone, so **every number that exists is one somebody can
+download** and the releases page reads straight through with no gaps. Bumping
+per push was tried first and produced exactly those gaps.
+
+Several pushes therefore share a version between releases, which is safe
+because installers only ever come from the release workflow. **Do not build
+installers locally and give them to anyone** — that is the one way two
+different builds could claim the same number, and an installed copy decides
+whether an update is newer by comparing exactly that.
+
+Renumbering a release that people already have is worse than a gap: publishing
+a lower number than an installed copy is running strands it, because it
+compares the two and concludes it is already newer. The workflow runs the
 checks, builds on all three platforms, and publishes a release with the
 installers, the single-file build, and the `latest.yml` metadata that
 electron-updater reads. See README.md for code signing.

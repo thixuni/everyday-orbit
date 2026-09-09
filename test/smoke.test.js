@@ -184,3 +184,14 @@ test('the built file has no local asset references left', () => {
   const refs = [...markup.matchAll(/(?:src|href)="(?!https?:|#|data:)([^"]+)"/g)].map(m => m[1]);
   assert.deepStrictEqual(refs, [], 'unresolved local references: ' + refs.join(', '));
 });
+
+test("the release flow is wired up and the version is clean", () => {
+  const pkg = JSON.parse(read("package.json"));
+  assert.match(pkg.version, /^\d+\.\d+\.\d+$/, "version should be three plain numbers, got " + pkg.version);
+  assert.ok(pkg.scripts && pkg.scripts.release, "npm run release is not wired up in package.json");
+  assert.ok(fs.existsSync(path.join(root, "scripts", "release.js")), "scripts/release.js is missing");
+
+  // The version moves during a release and nowhere else, so nothing else may write it.
+  const release = read("scripts/release.js");
+  assert.ok(/npm version|--no-git-tag-version/.test(release), "the release script should be the thing that sets the version");
+});
