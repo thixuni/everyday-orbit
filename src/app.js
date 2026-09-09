@@ -1634,7 +1634,7 @@ function renderSheet(){
     '<div class="sh-body">'+
       '<input class="sh-title" id="shTitle" value="'+esc(t.title)+'" placeholder="What needs doing?" data-act="sh-set" data-k="title">'+
 
-      '<div class="mgrid">'+
+      '<div class="sh-meta">'+
         metaRow("Dates",'<div class="dpair">'+
           '<input class="inp inp-sm" type="date" value="'+esc(tStart(t))+'" data-act="sh-set" data-k="start" aria-label="Start date">'+
           '<span class="arrow">'+icon("i-chev-r","ic-14")+'</span>'+
