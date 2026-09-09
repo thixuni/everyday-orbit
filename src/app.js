@@ -1696,19 +1696,27 @@ function renderSheet(){
   const isNew=!s.id,c=cat(t.cat),done=t.status==="completed";
   const subs=t.subtasks||[],dn=subs.filter(x=>x.d).length;
 
-  root.innerHTML='<div class="sheet-scrim" data-act="sheet-close"></div>'+
-  '<aside class="sheet" role="dialog" aria-modal="true" aria-label="Task detail">'+
-    '<header class="sh-head">'+
+  /* The scrim and the panel carry the open animation. Rebuilding them on every
+     edit replayed it, which read as the panel closing and reopening, so the
+     shell is created once and only its two halves are redrawn. */
+  let sheet=root.querySelector(".sheet");
+  if(!sheet){
+    root.innerHTML='<div class="sheet-scrim" data-act="sheet-close"></div>'+
+      '<aside class="sheet" role="dialog" aria-modal="true" aria-label="Task detail">'+
+      '<header class="sh-head"></header><div class="sh-body"></div></aside>';
+    sheet=root.querySelector(".sheet");
+  }
+
+  const headHtml=
       '<button class="tick'+(done?" on":"")+'" data-act="sh-done" aria-label="Mark complete"'+(isNew?" disabled":"")+'>'+icon("i-check")+'</button>'+
       '<select class="inp inp-sm sh-status" data-act="sh-set" data-k="status">'+
         STATUSES.map(x=>'<option value="'+x.id+'"'+(t.status===x.id?" selected":"")+'>'+esc(x.name)+'</option>').join("")+'</select>'+
       '<div class="spacer" style="flex:1"></div>'+
       (isNew?"":'<button class="icon-btn btn-sm" data-act="sh-timer" data-mode="countdown" title="Start the timer" aria-label="Start the timer">'+icon(running()&&running().task===t.id&&running().since?"i-pause":"i-play","ic-14")+'</button>')+
       (isNew?"":'<button class="icon-btn btn-sm btn-danger" data-act="sh-delete" title="Delete" aria-label="Delete task">'+icon("i-trash","ic-14")+'</button>')+
-      '<button class="icon-btn btn-sm" data-act="sheet-close" aria-label="Close">'+icon("i-x","ic-14")+'</button>'+
-    '</header>'+
+      '<button class="icon-btn btn-sm" data-act="sheet-close" aria-label="Close">'+icon("i-x","ic-14")+'</button>';
 
-    '<div class="sh-body">'+
+  const bodyHtml=
       '<input class="sh-title" id="shTitle" value="'+esc(t.title)+'" placeholder="What needs doing?" data-act="sh-set" data-k="title">'+
 
       (isNew?"":'<div class="sh-tabs" role="tablist">'+
@@ -1742,9 +1750,20 @@ function renderSheet(){
       commentsPane(t,isNew))+
 
       (isNew?'<div class="sh-create"><button class="btn btn-primary" data-act="sh-create">'+icon("i-check")+'Create task</button>'+
-          '<span class="mnone">Comments, documents and the timer open up once it exists.</span></div>':"")+
-    '</div>'+
-  '</aside>';
+          '<span class="mnone">Comments, documents and the timer open up once it exists.</span></div>':"");
+
+  /* Hold the scroll position across a redraw, but start at the top when the
+     content underneath actually changed — a different task, or the other tab. */
+  const bodyEl=sheet.querySelector(".sh-body");
+  const sameContent=root.dataset.task===String(t.id)&&root.dataset.tab===String(s.tab);
+  const keep=bodyEl.scrollTop;
+
+  sheet.querySelector(".sh-head").innerHTML=headHtml;
+  bodyEl.innerHTML=bodyHtml;
+  bodyEl.scrollTop=sameContent?keep:0;
+
+  root.dataset.task=t.id;
+  root.dataset.tab=s.tab;
 }
 
 /* ---- document editor ---- */
