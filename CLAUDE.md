@@ -167,11 +167,16 @@ Three parts, `1.2.3`. Only the last two move:
 - **A major change** — a new view, a feature people would notice and talk
   about — bumps the middle number and resets the last to zero: 1.2.0.
 
-**Bump it as part of pushing to GitHub, and only then.** Local commits do not
-move the number — work as many commits as you like, then raise it once when the
-push goes out, so one push is one version. The number is how an installed copy
-decides whether a build is newer than the one it is running, so two pushes must
-never share one.
+**Bump it as part of cutting a release, and only then.** Commits and pushes in
+between leave it alone, so every number that exists is one somebody can
+download and the releases page reads straight through with no gaps.
+
+That means several pushes share a version number between releases, which is
+harmless here: installers are only ever built by the release workflow from a
+`v*` tag, never by hand from `main`. Do not build installers locally and hand
+them to anyone — that is the one way two different builds could end up
+claiming the same number, and an installed copy decides whether an update is
+newer by comparing exactly that.
 
 ## Releasing
 
