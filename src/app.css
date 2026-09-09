@@ -222,6 +222,16 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .ev.sm{display:flex;align-items:center;gap:5px;padding:1px 6px;line-height:1.35}
 .ev.sm b{font-size:11px;flex:1 1 auto;min-width:0}
 .ev.sm i{flex:none;font-size:10px}
+/* A tracked session is something that happened, not something scheduled, so
+   it carries a heavier edge and a timer glyph to tell the two apart. */
+.ev.tracked{border-left-width:4px;border-left-style:solid;border-left-color:var(--c);
+  background:color-mix(in srgb,var(--c) 16%,var(--tint-base))}
+.ev.tracked b{display:flex;align-items:center;gap:5px;min-width:0}
+.ev.tracked b .ic{flex:none;opacity:.75}
+.ev.tracked:hover{background:color-mix(in srgb,var(--c) 24%,var(--tint-base))}
+.cal-tracked{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
+  color:var(--muted);background:var(--surface-3);border-radius:20px;padding:3px 10px}
+.cal-tracked .ic{color:var(--faint)}
 .ev.done{opacity:.5}
 .ev.done b{text-decoration:line-through}
 .nowline{position:absolute;left:0;right:0;height:0;border-top:1.6px solid var(--danger);z-index:4;pointer-events:none}

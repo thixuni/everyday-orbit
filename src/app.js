@@ -277,10 +277,7 @@ function renderTopbar(){
   let title="",sub="",right="";
   if(V.view==="calendar"){
     title="Calendar";
-    if(V.calMode==="time"){
-      const tot=sessionsIn(V.range||"week").reduce((n,x)=>n+x.secs,0);
-      sub=fmtDur(tot)+" tracked · "+((RANGES.find(x=>x.id===(V.range||"week"))||RANGES[0]).name.toLowerCase());
-    }else sub=V.calMode==="week"?"Week of "+fmtDate(ymd(startOfWeek(V.anchor))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear();
+    sub=V.calMode==="week"?"Week of "+fmtDate(ymd(startOfWeek(V.anchor))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear();
     right=topSearch("Search tasks and routines")+'<button class="btn btn-primary" data-act="new-task">'+icon("i-plus")+'New task</button>';
   }else if(V.view==="tasks"){
     title="Tasks";sub=open.length+" open"+(over.length?" · "+over.length+" overdue":"")+" · "+S.tasks.length+" total";
@@ -319,10 +316,22 @@ function tickBtn(t){return '<button class="tick'+(t.status==="completed"?" on":"
 /* ============ calendar ============ */
 function eventsFor(d){
   const s=ymd(d);
-  return S.routines.filter(r=>visibleCat(r.cat)&&routineOn(r,d)).map(r=>{
+  const evs=S.routines.filter(r=>visibleCat(r.cat)&&routineOn(r,d)).map(r=>{
     const[h,m]=(r.time||"09:00").split(":").map(Number);
-    return {r:r,start:h*60+m,dur:r.dur||30,date:s,done:doneR(r,s)};
-  }).sort((a,b)=>a.start-b.start);
+    return {kind:"routine",r:r,start:h*60+m,dur:r.dur||30,date:s,done:doneR(r,s)};
+  });
+  /* Time you actually spent, drawn at the hour you spent it and as long as it
+     ran — no rounding, so the block is the duration. */
+  S.sessions.forEach(x=>{
+    const st=new Date(x.start);
+    if(ymd(st)!==s)return;
+    const t=taskById(x.task);
+    if(!t||!visibleCat(t.cat))return;
+    evs.push({kind:"session",s:x,t:t,date:s,
+      start:st.getHours()*60+st.getMinutes(),
+      dur:(x.secs||0)/60});
+  });
+  return evs.sort((a,b)=>a.start-b.start);
 }
 function layoutEvents(evs){
   const out=[];let cluster=[],end=-1;
@@ -365,16 +374,33 @@ function weekGrid(){
   let hours="";for(let h=H0;h<H1;h++)hours+='<div class="hourlab num">'+fmtTime(pad(h)+":00")+'</div>';
   const cols=days.map(d=>{
     const s=ymd(d);let lines="";for(let h=H0;h<H1;h++)lines+='<div class="hourline"></div>';
-    const evs=layoutEvents(eventsFor(d).filter(e=>!V.q||e.r.title.toLowerCase().indexOf(V.q.toLowerCase())>-1||cat(e.r.cat).name.toLowerCase().indexOf(V.q.toLowerCase())>-1));
+    const q=(V.q||"").toLowerCase();
+    const evs=layoutEvents(eventsFor(d).filter(e=>{
+      if(!q)return true;
+      const title=e.kind==="session"?e.t.title:e.r.title;
+      const cid=e.kind==="session"?e.t.cat:e.r.cat;
+      return title.toLowerCase().indexOf(q)>-1||cat(cid).name.toLowerCase().indexOf(q)>-1;
+    }));
     const body=evs.map(e=>{
-      const c=cat(e.r.cat),top=(e.start/60-H0)*PX,ht=Math.max(20,(e.dur/60)*PX-2);
+      const isS=e.kind==="session";
+      const c=cat(isS?e.t.cat:e.r.cat),top=(e.start/60-H0)*PX;
+      const ht=isS?Math.max(5,(e.dur/60)*PX-2):Math.max(20,(e.dur/60)*PX-2);
       const w=100/e._n,left=e._c*w;
+      const pos='--c:'+c.color+';top:'+top.toFixed(1)+'px;height:'+ht.toFixed(1)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)';
       // A stacked title and time needs about 40px. Shorter blocks put them on
       // one line, and show only the start time there so the full range does
       // not eat the room the title needs.
       const compact=ht<40;
+
+      if(isS){
+        const st=new Date(e.s.start);
+        const began=pad(st.getHours())+":"+pad(st.getMinutes());
+        return '<button class="ev tracked'+(compact?" sm":"")+'" style="'+pos+'" data-act="task" data-id="'+e.t.id+
+          '" title="'+esc(e.t.title+" · "+fmtDur(e.s.secs)+" tracked from "+fmtTime(began))+'">'+
+          '<b>'+icon("i-timer","ic-14")+esc(e.t.title)+'</b><i class="num">'+esc(fmtDur(e.s.secs))+'</i></button>';
+      }
       const when=compact?fmtTime(e.r.time):fmtRange(e.r.time,e.r.dur);
-      return '<button class="ev'+(e.done?" done":"")+(compact?" sm":"")+'" style="--c:'+c.color+';top:'+top.toFixed(1)+'px;height:'+ht.toFixed(1)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" data-act="routine" data-id="'+e.r.id+'" data-date="'+s+'" title="'+esc(e.r.title+" · "+fmtRange(e.r.time,e.r.dur))+'"><b>'+esc(e.r.title)+'</b><i class="num">'+esc(when)+'</i></button>';}).join("");
+      return '<button class="ev'+(e.done?" done":"")+(compact?" sm":"")+'" style="'+pos+'" data-act="routine" data-id="'+e.r.id+'" data-date="'+s+'" title="'+esc(e.r.title+" · "+fmtRange(e.r.time,e.r.dur))+'"><b>'+esc(e.r.title)+'</b><i class="num">'+esc(when)+'</i></button>';}).join("");
     let now="";
     if(s===tstr){const n=new Date(),mins=n.getHours()*60+n.getMinutes();
       if(mins>=H0*60&&mins<=H1*60)now='<div class="nowline" style="top:'+(((mins/60)-H0)*PX).toFixed(1)+'px"></div>';}
@@ -424,29 +450,23 @@ function overduePanel(){
   }
   return '<aside class="overdue">'+head+'<div class="od-body">'+body+'</div></aside>';
 }
-/* Week and month show the time you have planned; Time shows where it actually
-   went. All three answer the same question, so they are modes of one view
-   rather than a separate section. */
 function viewCalendar(){
-  const mode=V.calMode||"week",isTime=mode==="time";
-  const modes='<div class="seg">'+
-    '<button data-act="cal-mode" data-mode="week" aria-pressed="'+(mode==="week")+'">Week</button>'+
-    '<button data-act="cal-mode" data-mode="month" aria-pressed="'+(mode==="month")+'">Month</button>'+
-    '<button data-act="cal-mode" data-mode="time" aria-pressed="'+isTime+'">'+icon("i-chart","ic-14")+'Time</button></div>';
+  const week=V.calMode==="week";
+  /* Hours tracked in the week on screen, so the total sits with the blocks it
+     is made of rather than on a page of its own. */
+  const from=ymd(startOfWeek(V.anchor)),to=ymd(addDays(startOfWeek(V.anchor),6));
+  const secs=S.sessions.reduce((n,x)=>{const k=ymd(new Date(x.start));
+    return n+(k>=from&&k<=to?(x.secs||0):0);},0);
 
-  const bar='<div class="cal-bar">'+(isTime
-    ? '<h2>Where the time went</h2><div class="spacer"></div>'+
-      '<div class="seg an-range">'+RANGES.map(x=>'<button data-act="an-range" data-v="'+x.id+'" aria-pressed="'+((V.range||"week")===x.id)+'">'+esc(x.name)+'</button>').join("")+'</div>'
-    : '<div class="stepper"><button data-act="cal-prev" aria-label="Previous">'+icon("i-chev-l")+'</button><button data-act="cal-next" aria-label="Next">'+icon("i-chev-r")+'</button></div>'+
-      '<button class="btn btn-sm" data-act="cal-today">Today</button>'+
-      '<h2>'+(mode==="week"?fmtDate(ymd(startOfWeek(V.anchor)))+" – "+fmtDate(ymd(addDays(startOfWeek(V.anchor),6))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear())+'</h2>'+
-      '<div class="spacer"></div>')+
-    modes+'</div>';
-
-  const body=isTime?viewTime():mode==="week"?weekGrid():monthGrid();
-  /* The catch-up panel is about what is outstanding, which has nothing to say
-     on a page about hours already spent. */
-  return '<div class="cal-wrap"><div class="cal-main">'+bar+body+'</div>'+(isTime?"":overduePanel())+'</div>';
+  const bar='<div class="cal-bar">'+
+    '<div class="stepper"><button data-act="cal-prev" aria-label="Previous">'+icon("i-chev-l")+'</button><button data-act="cal-next" aria-label="Next">'+icon("i-chev-r")+'</button></div>'+
+    '<button class="btn btn-sm" data-act="cal-today">Today</button>'+
+    '<h2>'+(week?fmtDate(from)+" – "+fmtDate(to):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear())+'</h2>'+
+    (week&&secs?'<span class="cal-tracked" title="Time tracked this week">'+icon("i-timer","ic-14")+fmtDur(secs)+'</span>':"")+
+    '<div class="spacer"></div>'+
+    '<div class="seg"><button data-act="cal-mode" data-mode="week" aria-pressed="'+week+'">Week</button>'+
+    '<button data-act="cal-mode" data-mode="month" aria-pressed="'+(!week)+'">Month</button></div></div>';
+  return '<div class="cal-wrap"><div class="cal-main">'+bar+(week?weekGrid():monthGrid())+'</div>'+overduePanel()+'</div>';
 }
 
 /* ============ tasks: filters ============ */
@@ -1108,7 +1128,6 @@ document.addEventListener("click",function(e){
     case "doc-del":if(arm(n,"Delete for good?")){deleteDoc(id);closeModal();renderSheet();renderView();toast("Document deleted");}break;
 
     /* ---- analytics ---- */
-    case "an-range":V.range=n.dataset.v;renderView();break;
     case "mx-set":{const t=taskById(id),k=n.dataset.k;
       if(t[k]==null){t[k]=true;const o=k==="urgent"?"important":"urgent";if(t[o]==null)t[o]=false;}
       else t[k]=!t[k];
@@ -1825,18 +1844,7 @@ function syncTimerWindow(){
 }
 
 /* ============ time analytics ============ */
-const RANGES=[{id:"week",name:"This week"},{id:"7",name:"Last 7 days"},{id:"month",name:"This month"},{id:"all",name:"Everything"}];
 
-function rangeStart(id){
-  if(id==="week")return startOfWeek(today());
-  if(id==="7")return addDays(today(),-6);
-  if(id==="month")return new Date(today().getFullYear(),today().getMonth(),1);
-  return new Date(1970,0,1);
-}
-function sessionsIn(id){
-  const from=rangeStart(id).getTime();
-  return S.sessions.filter(s=>s.start>=from&&visibleCat((taskById(s.task)||{}).cat));
-}
 /* A bar row, used for both the category and the task breakdown. */
 function barRow(label,secs,max,colour,right){
   const w=max?Math.max(1.5,secs/max*100):0;
@@ -1844,70 +1852,6 @@ function barRow(label,secs,max,colour,right){
     '<div class="btrack"><div class="bfill" style="width:'+w.toFixed(1)+'%;--c:'+(colour||"var(--accent)")+'"></div></div>'+
     '<div class="bval num">'+esc(right||fmtDur(secs))+'</div></div>';
 }
-
-function viewTime(){
-  const r=V.range||"week",ss=sessionsIn(r);
-  const total=ss.reduce((n,s)=>n+s.secs,0);
-  const taskIds=[];ss.forEach(s=>{if(taskIds.indexOf(s.task)===-1)taskIds.push(s.task);});
-
-  /* by category */
-  const byCat={};ss.forEach(s=>{const t=taskById(s.task);if(!t)return;byCat[t.cat]=(byCat[t.cat]||0)+s.secs;});
-  const catRows=Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]);
-  const catMax=catRows.length?byCat[catRows[0]]:0;
-
-  /* by task, with the estimate alongside so over-runs are obvious */
-  const byTask={};ss.forEach(s=>{byTask[s.task]=(byTask[s.task]||0)+s.secs;});
-  const taskRows=Object.keys(byTask).sort((a,b)=>byTask[b]-byTask[a]).slice(0,12);
-  const taskMax=taskRows.length?byTask[taskRows[0]]:0;
-
-  /* by day across the range */
-  const days=[],from=rangeStart(r),span=r==="all"
-    ? Math.min(30,Math.max(1,Math.round((Date.now()-(ss.length?Math.min.apply(null,ss.map(s=>s.start)):Date.now()))/864e5)+1))
-    : Math.round((today()-from)/864e5)+1;
-  for(let i=span-1;i>=0;i--){const d=addDays(today(),-i),k=ymd(d);
-    days.push({k:k,d:d,secs:ss.reduce((n,s)=>n+(ymd(new Date(s.start))===k?s.secs:0),0)});}
-  const dayMax=Math.max.apply(null,days.map(d=>d.secs).concat([1]));
-
-  const estTotal=taskIds.reduce((n,id)=>{const t=taskById(id);return n+(t?tEst(t)*60:0);},0);
-
-  const tiles='<div class="tiles">'+
-    '<div class="tile"><span class="tl">Tracked</span><b class="num">'+fmtDur(total)+'</b></div>'+
-    '<div class="tile"><span class="tl">Sessions</span><b class="num">'+ss.length+'</b></div>'+
-    '<div class="tile"><span class="tl">Tasks worked</span><b class="num">'+taskIds.length+'</b></div>'+
-    '<div class="tile"><span class="tl">Estimated</span><b class="num">'+(estTotal?fmtDur(estTotal):"—")+'</b></div>'+
-    '</div>';
-
-  const dayChart='<div class="card pad"><h3 class="sec-label">By day</h3><div class="daybars">'+
-    days.map(d=>'<div class="dbar" title="'+esc(fmtDate(d.k)+" · "+fmtDur(d.secs))+'">'+
-      '<div class="dbar-track"><div class="dbar-fill" style="height:'+(d.secs/dayMax*100).toFixed(1)+'%"></div></div>'+
-      '<span class="dbar-lab">'+(span<=14?DOWS[(d.d.getDay()+6)%7].slice(0,1):(d.d.getDate()%5===0?d.d.getDate():""))+'</span></div>').join("")+
-    '</div></div>';
-
-  const catCard='<div class="card pad"><h3 class="sec-label">By category</h3>'+
-    (catRows.length?catRows.map(id=>barRow(icon(cat(id).icon,"ic-14")+esc(cat(id).name),byCat[id],catMax,cat(id).color)).join("")
-      :'<p class="mnone">Nothing tracked in this range.</p>')+'</div>';
-
-  const taskCard='<div class="card pad"><h3 class="sec-label">By task</h3>'+
-    (taskRows.length?taskRows.map(id=>{const t=taskById(id);if(!t)return "";
-        const est=tEst(t)*60,over=est&&byTask[id]>est;
-        return barRow('<button class="lk lk-inline" data-act="task" data-id="'+id+'">'+esc(t.title)+'</button>',
-          byTask[id],taskMax,cat(t.cat).color,
-          fmtDur(byTask[id])+(est?(over?" · over "+fmtDur(byTask[id]-est):" of "+fmtDur(est)):""));}).join("")
-      :'<p class="mnone">Nothing tracked in this range.</p>')+'</div>';
-
-  const recent=ss.slice().sort((a,b)=>b.start-a.start).slice(0,14);
-  const log='<div class="card pad"><h3 class="sec-label">Recent sessions</h3>'+
-    (recent.length?'<div class="slist">'+recent.map(s=>{const t=taskById(s.task);
-        return '<div class="srow"><span class="sdot" style="--c:'+(t?cat(t.cat).color:"var(--faint)")+'"></span>'+
-          '<span class="stitle">'+esc(t?t.title:"Deleted task")+'</span>'+
-          '<span class="smode">'+esc(s.mode==="countdown"?"Blitz":"Stopwatch")+'</span>'+
-          '<span class="swhen">'+esc(relTime(s.start))+'</span>'+
-          '<span class="ssecs num">'+fmtDur(s.secs)+'</span></div>';}).join("")+'</div>'
-      :'<p class="mnone">No sessions yet. Start a timer from any task.</p>')+'</div>';
-
-  return '<div class="an">'+tiles+dayChart+'<div class="an-two">'+catCard+taskCard+'</div>'+log+'</div>';
-}
-
 
 const hadLocal=loadLocal();
 render();

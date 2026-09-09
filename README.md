@@ -129,8 +129,8 @@ SmartScreen immediately, and costs more); the Apple Developer Programme is
 Give a task an estimate and press **Blitz it**: the timer counts down, and keeps
 counting once it passes zero so overtime is visible rather than hidden. For work
 you cannot estimate, **Stopwatch** counts up instead. Either way each run is
-stored as a session, and the calendar’s **Time** mode breaks those sessions down by day, by
-category and by task, with estimate against actual.
+stored as a session, and each run is drawn straight onto the calendar, at the hour it happened and as
+long as it lasted, so planned and actual time sit side by side
 
 **View ▸ Floating timer** (or the pop-out button on the timer strip) opens a
 small always-on-top window that stays above other apps while you work, with

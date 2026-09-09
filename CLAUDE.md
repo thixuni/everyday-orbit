@@ -95,10 +95,11 @@ right document. The loop is broken on both sides: the main process ignores
 file events for two seconds after its own write, and `applyVaultChange()`
 never writes back to the vault.
 
-Time is a mode of the calendar (`V.calMode === "time"`), not a section of its
-own — week and month show planned time, Time shows where it went, so they sit
-behind one nav item. `viewCalendar()` picks the body and hides the catch-up
-panel there.
+Tracked time is drawn on the calendar rather than summarised elsewhere:
+`eventsFor()` returns routines and `S.sessions` rows together, and the week
+grid lays them out side by side. A session block is its true length — routines
+keep a 20px floor so their label stays legible, sessions do not, because a
+block that claims a duration has to be that duration.
 
 Time tracking stores one `S.sessions` row per run. A task total is always
 summed from those rows, never cached on the task. The timer in flight lives in
