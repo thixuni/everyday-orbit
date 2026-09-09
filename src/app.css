@@ -259,33 +259,51 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .od-item .t small.mut{color:var(--muted)}
 
 /* ---------- board ---------- */
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+/* Tasks sits on white with a bar across the top, the same shape as the
+   calendar, so moving between the two does not change the furniture. */
+.task-main{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--surface)}
+.board-scroll{flex:1;min-height:0;overflow:auto;padding:16px 18px 18px}
+.list-scroll{flex:1;min-height:0;overflow-y:auto;padding:16px 18px 24px}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
 .filter-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:20px;border:1px solid var(--line);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--ink-2)}
 .filter-pill:hover{border-color:var(--line-2)}
 .filter-pill.on{background:var(--accent-soft);border-color:transparent;color:var(--accent-2)}
 .filter-pill .x{color:var(--faint)}
-.adv{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:14px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
+.adv{background:var(--surface-2);border-bottom:1px solid var(--line);padding:14px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
 .field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .field > label{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
 .inp,select.inp,textarea.inp{width:100%;height:34px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-s);padding:0 10px;outline:0;font-size:13px;transition:border-color .15s,box-shadow .15s}
 textarea.inp{height:auto;padding:8px 10px;resize:vertical;line-height:1.55}
 .inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237D867C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px}
-.board{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:10px}
-.col{width:262px;flex:none;background:var(--surface-3);border-radius:var(--r-m);padding:9px;display:flex;flex-direction:column;gap:8px;max-height:100%}
+.board{display:flex;gap:12px;align-items:flex-start;min-height:100%}
+.col{width:274px;flex:none;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-m);padding:10px;display:flex;flex-direction:column;gap:9px}
 .col.over{background:var(--accent-soft);outline:2px dashed var(--accent);outline-offset:-2px}
 .col-head{display:flex;align-items:center;gap:7px;padding:1px 3px}
 .col-head .sw{width:7px;height:7px;border-radius:50%;background:var(--s)}
 .col-head h3{font-size:12.5px;font-weight:700;flex:1}
 .col-head .n{font-size:11px;font-weight:700;color:var(--faint)}
 .col-list{display:flex;flex-direction:column;gap:7px;overflow-y:auto;min-height:26px}
-.tcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-s);padding:9px 10px;box-shadow:var(--sh-1);cursor:grab;display:flex;flex-direction:column;gap:7px;text-align:left;width:100%}
+.tcard{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--line-2);border-radius:var(--r-s);padding:12px 13px;box-shadow:var(--sh-1);cursor:grab;display:flex;flex-direction:column;gap:9px;text-align:left;width:100%}
 .tcard:hover{border-color:var(--line-2);box-shadow:var(--sh-2)}
 .tcard.dragging{opacity:.4}
 .tcard .top{display:flex;align-items:flex-start;gap:7px}
-.tcard .ttl{font-size:12.8px;font-weight:600;line-height:1.35;flex:1;min-width:0}
+.tcard .ttl{font-size:13.5px;font-weight:600;line-height:1.4;flex:1;min-width:0}
 .tcard.done .ttl{text-decoration:line-through;color:var(--muted)}
-.tcard .meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.tcard .meta{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:11.5px;font-weight:500;color:var(--muted);padding-left:25px}
+.tcard .meta .ic{flex:none}
+.m-cat{display:inline-flex;align-items:center;gap:5px;color:var(--muted)}
+.m-cat .ic{color:var(--c)}
+.m-due.soon{color:var(--amber);font-weight:600}
+.m-due.over{color:var(--danger);font-weight:600}
+.m-subs{color:var(--faint)}
+/* Priority reads off the left edge; the label repeats it for anyone who
+   cannot use the colour. */
+.m-quad{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--q);padding-left:25px}
+.tcard.q-do{border-left-color:var(--accent)}
+.tcard.q-decide{border-left-color:var(--amber)}
+.tcard.q-delegate{border-left-color:var(--blue)}
+.tcard.q-drop{border-left-color:var(--danger)}
 .bar{height:4px;border-radius:4px;background:var(--surface-3);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
 .addcard{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;font-weight:600;padding:6px 4px;border-radius:8px}

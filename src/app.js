@@ -487,28 +487,39 @@ const field=(l,inner)=>'<div class="field"><label>'+esc(l)+'</label>'+inner+'</d
 /* ============ tasks: board + list ============ */
 function taskCard(t){
   const c=cat(t.cat),subs=t.subtasks||[],dn=subs.filter(s=>s.d).length;
-  return '<div class="tcard'+(t.status==="completed"?" done":"")+'" draggable="true" data-id="'+t.id+'" data-act="task">'+
+  const q=quadOf(t),Q=q?QUADS.find(x=>x.id===q):null;
+  const over=isOverdue(t),soon=!over&&t.due&&dayDiff(t.due,TODAY())<=1;
+
+  /* One muted line carries category, date and priority. Three filled pills
+     per card turned a column into a wall of colour. */
+  const meta=[];
+  meta.push('<span class="m-cat" style="--c:'+c.color+'">'+icon(c.icon,"ic-14")+esc(c.name)+'</span>');
+  if(t.due)meta.push('<span class="m-due'+(over?" over":soon?" soon":"")+'">'+esc(relDue(t.due))+'</span>');
+  if(subs.length)meta.push('<span class="m-subs num">'+dn+'/'+subs.length+'</span>');
+
+  return '<div class="tcard'+(t.status==="completed"?" done":"")+(Q?" "+Q.cls:"")+'" draggable="true" data-id="'+t.id+'" data-act="task">'+
     '<div class="top">'+tickBtn(t)+'<span class="ttl">'+esc(t.title)+'</span></div>'+
-    '<div class="meta">'+catChip(t.cat)+dueChip(t)+quadChip(t)+'</div>'+
+    '<div class="meta">'+meta.join("")+'</div>'+
+    (Q?'<div class="m-quad">'+icon(Q.icon,"ic-14")+esc(Q.name)+'</div>':"")+
     (subs.length?'<div class="bar" title="'+dn+' of '+subs.length+' subtasks done"><i style="width:'+Math.round(dn/subs.length*100)+'%"></i></div>':"")+
     '</div>';
 }
 function viewBoard(){
   const list=filterTasks("board");
-  return filterBar()+'<div class="board">'+STATUSES.map(s=>{
+  return '<div class="task-main">'+filterBar()+'<div class="board-scroll"><div class="board">'+STATUSES.map(s=>{
     const items=list.filter(t=>t.status===s.id);
     return '<div class="col" data-col="'+s.id+'"><div class="col-head"><span class="sw" style="--s:'+s.color+'"></span><h3>'+esc(s.name)+'</h3><span class="n num">'+items.length+'</span></div>'+
       '<div class="col-list">'+items.map(taskCard).join("")+'</div>'+
-      '<button class="addcard" data-act="new-task" data-status="'+s.id+'">'+icon("i-plus","ic-14")+'Add task</button></div>';}).join("")+'</div>';
+      '<button class="addcard" data-act="new-task" data-status="'+s.id+'">'+icon("i-plus","ic-14")+'Add task</button></div>';}).join("")+'</div></div></div>';
 }
 function viewList(){
   const list=filterTasks("list");
-  if(!list.length)return filterBar()+'<div class="card"><div class="empty">'+icon("i-inbox")+'<p>No tasks match these filters. Try clearing them or add something new.</p></div></div>';
+  if(!list.length)return '<div class="task-main">'+filterBar()+'<div class="list-scroll"><div class="empty">'+icon("i-inbox")+'<p>No tasks match these filters. Try clearing them or add something new.</p></div></div></div>';
   const groups={},order=[];
   list.forEach(t=>{const k=t.due?MONS[parseD(t.due).getMonth()]+" "+parseD(t.due).getFullYear():"No due date";
     if(!groups[k]){groups[k]=[];order.push(k);}groups[k].push(t);});
   const head='<div class="lrow head"><span></span><span>Task</span><span>Due date</span><span>Priority</span><span>Category</span><span>Status</span><span></span></div>';
-  return filterBar()+order.map(k=>'<div class="lgroup"><h3>'+esc(k)+'<span class="n num">'+groups[k].length+'</span></h3><div class="ltable">'+head+
+  return '<div class="task-main">'+filterBar()+'<div class="list-scroll">'+order.map(k=>'<div class="lgroup"><h3>'+esc(k)+'<span class="n num">'+groups[k].length+'</span></h3><div class="ltable">'+head+
     groups[k].map(t=>{const c=cat(t.cat),s=ST(t.status),subs=t.subtasks||[];
       return '<div class="lrow'+(t.status==="completed"?" done":"")+'" data-act="task" data-id="'+t.id+'">'+
         tickBtn(t)+
@@ -518,7 +529,7 @@ function viewList(){
         '<span>'+catChip(t.cat)+'</span>'+
         '<span class="status-dot" style="--s:'+s.color+'"><span class="sw"></span>'+esc(s.name)+'</span>'+
         '<button class="rowbtn" data-act="task" data-id="'+t.id+'" data-stop="1" aria-label="Edit task">'+icon("i-edit","ic-14")+'</button></div>';}).join("")+
-    '</div></div>').join("");
+    '</div></div>').join("")+'</div></div>';
 }
 
 /* ============ matrix ============ */
@@ -880,7 +891,7 @@ function scratchModal(){
 
 /* ============ render ============ */
 function renderView(){
-  const vp=el("viewport"),flush=(V.view==="calendar"||V.view==="notes");
+  const vp=el("viewport"),flush=(V.view==="calendar"||V.view==="notes"||V.view==="tasks");
   vp.className="viewport"+(flush?" flush":"");
   if(V.view==="calendar")vp.innerHTML=viewCalendar();
   else if(V.view==="tasks")vp.innerHTML=V.taskMode==="board"?viewBoard():viewList();
