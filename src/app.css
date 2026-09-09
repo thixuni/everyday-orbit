@@ -297,9 +297,11 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .m-due.soon{color:var(--amber);font-weight:600}
 .m-due.over{color:var(--danger);font-weight:600}
 .m-subs{color:var(--faint)}
-/* Priority reads off the left edge; the label repeats it for anyone who
-   cannot use the colour. */
-.m-quad{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--q);padding-left:25px}
+/* What is attached to the task: subtasks, comments, documents, files, links.
+   Only the ones that exist are drawn, so a bare task stays bare. */
+.marks{display:flex;flex-wrap:wrap;gap:4px 11px;align-items:center;padding-left:25px;font-size:11px;color:var(--faint)}
+.m-mark{display:inline-flex;align-items:center;gap:4px}
+.m-mark .num{font-weight:600}
 .tcard.q-do{border-left-color:var(--accent)}
 .tcard.q-decide{border-left-color:var(--amber)}
 .tcard.q-delegate{border-left-color:var(--blue)}
@@ -467,21 +469,21 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 
 /* ---------- task detail sheet ---------- */
 .sheet-scrim{position:fixed;inset:0;background:rgba(30,38,32,.32);z-index:44;border:0;animation:fade .16s ease}
-.sheet{position:fixed;top:0;right:0;bottom:0;width:min(560px,100vw);z-index:45;background:var(--surface);
+.sheet{position:fixed;top:0;right:0;bottom:0;width:clamp(460px,50vw,1040px);max-width:100vw;z-index:45;background:var(--surface);
   border-left:1px solid var(--line);box-shadow:var(--sh-3);display:flex;flex-direction:column;
   animation:slidein .2s cubic-bezier(.22,.7,.3,1)}
 @keyframes slidein{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
-.sh-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.sh-head{display:flex;align-items:center;gap:10px;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--surface-2)}
 .sh-status{width:auto;min-width:150px}
-.sh-body{flex:1;overflow-y:auto;padding:16px 18px 30px;min-height:0}
-.sh-title{width:100%;border:1px solid transparent;background:none;font-family:var(--fd);font-size:20px;font-weight:600;
-  letter-spacing:-.02em;color:var(--ink);padding:5px 7px;border-radius:var(--r-s);margin-bottom:14px}
+.sh-body{flex:1;overflow-y:auto;padding:22px 28px 40px;min-height:0}
+.sh-title{width:100%;border:1px solid transparent;background:none;font-family:var(--fd);font-size:23px;font-weight:600;
+  letter-spacing:-.02em;line-height:1.25;color:var(--ink);padding:6px 8px;border-radius:var(--r-s);margin:0 -8px 6px}
 .sh-title:hover{border-color:var(--line)}
 .sh-title:focus{border-color:var(--accent);outline:0;box-shadow:0 0 0 3px var(--accent-soft)}
 
-.sh-meta{display:flex;flex-direction:column;gap:2px;margin-bottom:18px}
-.mrow{display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px;align-items:start;padding:5px 0}
-.mlab{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);padding-top:6px}
+.sh-meta{display:flex;flex-direction:column;gap:4px;margin-bottom:30px}
+.mrow{display:grid;grid-template-columns:132px minmax(0,1fr);gap:16px;align-items:start;padding:8px 0}
+.mlab{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--muted);padding-top:8px}
 .mlab .ic{color:var(--faint)}
 .mval{min-width:0}
 .mnone{font-size:12px;color:var(--faint)}
@@ -521,11 +523,11 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .fsize{color:var(--faint);font-size:11px;flex:none}
 
-.sh-sec{margin-bottom:18px}
-.sh-sec .sec-label{display:block;margin-bottom:7px}
+.sh-sec{margin-bottom:30px}
+.sh-sec .sec-label{display:block;margin-bottom:11px}
 .sh-sec .sec-label .num{color:var(--faint);font-weight:600}
 .sh-create{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding-top:6px;border-top:1px solid var(--line)}
-.sh-tabs{margin:0 0 16px;display:inline-flex}
+.sh-tabs{margin:2px 0 24px;display:inline-flex}
 .sh-tabs .num{color:var(--faint);font-weight:600}
 
 /* ---------- activity feed ---------- */
@@ -571,7 +573,7 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 /* ---------- document editor ---------- */
 .modal-wide{width:min(920px,94vw)}
 .doc-title{font-family:var(--fd);font-size:16px;font-weight:600;margin-bottom:10px}
-.doc-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;height:min(52vh,440px)}
+.doc-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;height:min(56vh,520px)}
 .doc-md{height:100%;resize:none;font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:12.5px;line-height:1.6}
 .doc-prev{height:100%;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-s);
   padding:11px 13px;background:var(--surface-2);font-size:13px;color:var(--ink-2)}

@@ -495,12 +495,26 @@ function taskCard(t){
   const meta=[];
   meta.push('<span class="m-cat" style="--c:'+c.color+'">'+icon(c.icon,"ic-14")+esc(c.name)+'</span>');
   if(t.due)meta.push('<span class="m-due'+(over?" over":soon?" soon":"")+'">'+esc(relDue(t.due))+'</span>');
-  if(subs.length)meta.push('<span class="m-subs num">'+dn+'/'+subs.length+'</span>');
 
-  return '<div class="tcard'+(t.status==="completed"?" done":"")+(Q?" "+Q.cls:"")+'" draggable="true" data-id="'+t.id+'" data-act="task">'+
+  /* What is attached to this task, counted straight off state so the card does
+     not depend on helpers declared further down the file. */
+  const comments=S.activity.reduce((n,a)=>n+(a.task===t.id&&a.kind==="comment"?1:0),0);
+  const docs=S.docs.reduce((n,d)=>n+(d.task===t.id?1:0),0);
+  const marks=[];
+  const mark=(ic,n,one,many)=>'<span class="m-mark" title="'+n+' '+(n===1?one:many)+'">'+icon(ic,"ic-14")+'<span class="num">'+n+'</span></span>';
+  if(subs.length)marks.push('<span class="m-mark" title="'+dn+' of '+subs.length+' subtasks done">'+icon("i-check","ic-14")+'<span class="num">'+dn+'/'+subs.length+'</span></span>');
+  if(comments)marks.push(mark("i-chat",comments,"comment","comments"));
+  if(docs)marks.push(mark("i-doc",docs,"document","documents"));
+  if(tFiles(t).length)marks.push(mark("i-clip",tFiles(t).length,"attachment","attachments"));
+  if(tLinks(t).length)marks.push(mark("i-link",tLinks(t).length,"linked task","linked tasks"));
+
+  /* The quadrant reads off the coloured left edge. Its name is on the card
+     itself so it survives for anyone not going by colour. */
+  const label=Q?esc(t.title)+" — "+Q.name+", "+Q.tag.toLowerCase():esc(t.title);
+  return '<div class="tcard'+(t.status==="completed"?" done":"")+(Q?" "+Q.cls:"")+'" draggable="true" data-id="'+t.id+'" data-act="task" title="'+label+'" aria-label="'+label+'">'+
     '<div class="top">'+tickBtn(t)+'<span class="ttl">'+esc(t.title)+'</span></div>'+
     '<div class="meta">'+meta.join("")+'</div>'+
-    (Q?'<div class="m-quad">'+icon(Q.icon,"ic-14")+esc(Q.name)+'</div>':"")+
+    (marks.length?'<div class="marks">'+marks.join("")+'</div>':"")+
     (subs.length?'<div class="bar" title="'+dn+' of '+subs.length+' subtasks done"><i style="width:'+Math.round(dn/subs.length*100)+'%"></i></div>':"")+
     '</div>';
 }
@@ -1074,14 +1088,14 @@ document.addEventListener("click",function(e){
       if(!box||!t||!V.sheet.id)break;
       const txt=box.value.trim();
       if(!txt){box.focus();break;}
-      logAct(t.id,"comment",txt);box.value="";renderSheet();break;}
-    case "act-del":if(arm(n,"Delete?")){S.activity=S.activity.filter(a=>a.id!==id);save("activity");renderSheet();}break;
+      logAct(t.id,"comment",txt);box.value="";renderSheet();renderView();break;}
+    case "act-del":if(arm(n,"Delete?")){S.activity=S.activity.filter(a=>a.id!==id);save("activity");renderSheet();renderView();}break;
     case "doc-new":{const t=sheetTask();if(t&&V.sheet.id)docModal(null,t.id);break;}
     case "doc-open":docModal(id);break;
     case "doc-save":{const title=(el("dcTitle").value||"").trim()||"Untitled",md=el("dcMd").value;
       saveDoc(n.dataset.id||null,n.dataset.task||null,title,md);
-      closeModal();renderSheet();toast("Document saved");break;}
-    case "doc-del":if(arm(n,"Delete for good?")){deleteDoc(id);closeModal();renderSheet();toast("Document deleted");}break;
+      closeModal();renderSheet();renderView();toast("Document saved");break;}
+    case "doc-del":if(arm(n,"Delete for good?")){deleteDoc(id);closeModal();renderSheet();renderView();toast("Document deleted");}break;
 
     /* ---- analytics ---- */
     case "an-range":V.range=n.dataset.v;renderView();break;
