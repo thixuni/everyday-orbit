@@ -527,8 +527,16 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .sh-sec .sec-label{display:block;margin-bottom:11px}
 .sh-sec .sec-label .num{color:var(--faint);font-weight:600}
 .sh-create{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding-top:6px;border-top:1px solid var(--line)}
-.sh-tabs{margin:2px 0 24px;display:inline-flex}
-.sh-tabs .num{color:var(--faint);font-weight:600}
+/* Two words on a rule, not a filled control: the panel already knows what it
+   is, so the switch should barely register until you look for it. */
+.sh-tabs{display:flex;gap:20px;margin:6px 0 24px;border-bottom:1px solid var(--line)}
+.sh-tab{padding:0 0 9px;font-size:13px;font-weight:600;color:var(--muted);
+  border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:6px}
+.sh-tab:hover{color:var(--ink)}
+.sh-tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.sh-tab .num{font-size:11px;font-weight:600;color:var(--faint);background:var(--surface-3);
+  border-radius:20px;padding:1px 7px}
+.sh-tab[aria-selected="true"] .num{background:var(--accent-soft);color:var(--accent-2)}
 
 /* ---------- activity feed ---------- */
 .feed{display:flex;flex-direction:column;gap:9px;margin-bottom:12px}

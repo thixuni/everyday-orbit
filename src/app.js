@@ -1711,10 +1711,10 @@ function renderSheet(){
     '<div class="sh-body">'+
       '<input class="sh-title" id="shTitle" value="'+esc(t.title)+'" placeholder="What needs doing?" data-act="sh-set" data-k="title">'+
 
-      (isNew?"":'<div class="seg sh-tabs">'+
-        '<button data-act="sh-tab" data-v="details" aria-pressed="'+(s.tab!=="activity")+'">'+icon("i-list","ic-14")+'Details</button>'+
-        '<button data-act="sh-tab" data-v="activity" aria-pressed="'+(s.tab==="activity")+'">'+icon("i-clock","ic-14")+'Activity'+
-          (histCount(t)?' <span class="num">'+histCount(t)+'</span>':"")+'</button></div>')+
+      (isNew?"":'<div class="sh-tabs" role="tablist">'+
+        '<button class="sh-tab" data-act="sh-tab" data-v="details" role="tab" aria-selected="'+(s.tab!=="activity")+'">Details</button>'+
+        '<button class="sh-tab" data-act="sh-tab" data-v="activity" role="tab" aria-selected="'+(s.tab==="activity")+'">Activity'+
+          (histCount(t)?'<span class="num">'+histCount(t)+'</span>':"")+'</button></div>')+
 
       (s.tab==="activity"?historyPane(t):'<div class="sh-meta">'+
         metaRow("Dates",'<div class="dpair">'+
