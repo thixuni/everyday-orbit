@@ -19,6 +19,16 @@ const DOWS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const icon=(n,c)=>'<svg class="ic '+(c||"")+'" aria-hidden="true"><use href="#'+n+'"/></svg>';
 const fmtDate=s=>{if(!s)return"";const d=parseD(s);return d.getDate()+" "+MONS[d.getMonth()]+(d.getFullYear()!==today().getFullYear()?" "+d.getFullYear():"");};
 const fmtTime=t=>{if(!t)return"";const[h,m]=t.split(":").map(Number);const ap=h>=12?"pm":"am";const hh=h%12===0?12:h%12;return hh+(m?":"+pad(m):"")+ap;};
+/* "9–9:45am" — the trailing am/pm is dropped from the start when both ends
+   share it, which is how calendars write a range. */
+const fmtRange=(t,dur)=>{
+  if(!t)return"";
+  const[h,m]=t.split(":").map(Number),s=h*60+m;
+  if(!dur)return fmtTime(t);
+  const e=s+dur,eh=Math.floor(e/60)%24,em=e%60;
+  const a=fmtTime(t),b=fmtTime(pad(eh)+":"+pad(em));
+  return((h<12)===(eh<12)?a.replace(/(am|pm)$/,""):a)+"–"+b;
+};
 const relDue=s=>{if(!s)return"No date";const d=dayDiff(s,TODAY());if(d===0)return"Today";if(d===1)return"Tomorrow";if(d===-1)return"Yesterday";if(d<0)return Math.abs(d)+"d overdue";if(d<7)return"In "+d+"d";return fmtDate(s);};
 const stripHtml=h=>{const t=document.createElement("div");t.innerHTML=String(h||"").replace(/<\/(p|div|h[1-6]|li|blockquote|ul|ol|tr)>/gi,"$& ");return (t.textContent||"").replace(/\s+/g," ").trim();};
 
@@ -332,7 +342,13 @@ function weekGrid(){
   let ad='<div class="allday"><div class="lab">Tasks</div>'+days.map(d=>{const s=ymd(d);
     const ts=tasksFor(s);
     return '<div class="ad-cell'+(s===tstr?" today":"")+'" data-act="new-task" data-date="'+s+'">'+ts.map(t=>{const c=cat(t.cat);
-      return '<button class="tchip'+(t.status==="completed"?" done":"")+(isOverdue(t)?" over":"")+'" style="--c:'+c.color+'" data-act="task" data-id="'+t.id+'" data-stop="1">'+icon(c.icon)+'<span>'+esc(t.title)+'</span></button>';}).join("")+'</div>';}).join("")+'</div>';
+      // A task, not an event: a tick box you can complete straight from the
+      // calendar, then the title. Two buttons so both stay keyboard reachable.
+      const done=t.status==="completed";
+      return '<div class="tchip'+(done?" done":"")+(isOverdue(t)?" over":"")+'" style="--c:'+c.color+'">'+
+        '<button class="tchip-tick" data-act="task-done" data-id="'+t.id+'" role="checkbox" aria-checked="'+done+'" aria-label="'+(done?"Mark not done":"Mark complete")+'">'+icon("i-check")+'</button>'+
+        '<button class="tchip-body" data-act="task" data-id="'+t.id+'">'+icon(c.icon,"ic-14")+'<span>'+esc(t.title)+'</span></button>'+
+        '</div>';}).join("")+'</div>';}).join("")+'</div>';
   let hours="";for(let h=H0;h<H1;h++)hours+='<div class="hourlab num">'+fmtTime(pad(h)+":00")+'</div>';
   const cols=days.map(d=>{
     const s=ymd(d);let lines="";for(let h=H0;h<H1;h++)lines+='<div class="hourline"></div>';
@@ -340,7 +356,12 @@ function weekGrid(){
     const body=evs.map(e=>{
       const c=cat(e.r.cat),top=(e.start/60-H0)*PX,ht=Math.max(20,(e.dur/60)*PX-2);
       const w=100/e._n,left=e._c*w;
-      return '<button class="ev'+(e.done?" done":"")+'" style="--c:'+c.color+';top:'+top.toFixed(1)+'px;height:'+ht.toFixed(1)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" data-act="routine" data-id="'+e.r.id+'" data-date="'+s+'"><b>'+esc(e.r.title)+'</b><i class="num">'+fmtTime(e.r.time)+'</i></button>';}).join("");
+      // A stacked title and time needs about 40px. Shorter blocks put them on
+      // one line, and show only the start time there so the full range does
+      // not eat the room the title needs.
+      const compact=ht<40;
+      const when=compact?fmtTime(e.r.time):fmtRange(e.r.time,e.r.dur);
+      return '<button class="ev'+(e.done?" done":"")+(compact?" sm":"")+'" style="--c:'+c.color+';top:'+top.toFixed(1)+'px;height:'+ht.toFixed(1)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" data-act="routine" data-id="'+e.r.id+'" data-date="'+s+'" title="'+esc(e.r.title+" · "+fmtRange(e.r.time,e.r.dur))+'"><b>'+esc(e.r.title)+'</b><i class="num">'+esc(when)+'</i></button>';}).join("");
     let now="";
     if(s===tstr){const n=new Date(),mins=n.getHours()*60+n.getMinutes();
       if(mins>=H0*60&&mins<=H1*60)now='<div class="nowline" style="top:'+(((mins/60)-H0)*PX).toFixed(1)+'px"></div>';}
@@ -730,6 +751,43 @@ function applyImport(){
   KEYS.forEach(function(k){touched[k]=true;save(k);});
   closeModal();render();toast("Backup restored");
 }
+/* The priority section is two either/or pairs shown as four boxes, in the
+   order they appear on the matrix table: urgency and importance each stay
+   unset until one of their two boxes is ticked. */
+const PRIO_OPTS=[
+ {k:"urgent",   v:"1",name:"Urgent"},
+ {k:"important",v:"1",name:"Important"},
+ {k:"important",v:"0",name:"Not Important"},
+ {k:"urgent",   v:"0",name:"Not Urgent"}];
+
+const flagVal=b=>b==null?"":(b?"1":"0");
+function quadFromFlags(u,i){
+  if(u===""||i==="")return null;
+  const U=u==="1",I=i==="1";
+  if(U&&I)return "do";
+  if(!U&&I)return "decide";
+  if(U&&!I)return "delegate";
+  return "drop";
+}
+
+function renderPrio(){
+  const M=el("modalRoot"),w=el("tPrio");if(!w)return;
+  const st={urgent:M.dataset.urgent||"",important:M.dataset.important||""};
+  const q=quadFromFlags(st.urgent,st.important),Q=q?QUADS.find(x=>x.id===q):null;
+  const half=st.urgent!==""||st.important!=="";
+  w.innerHTML='<div class="pickers">'+PRIO_OPTS.map(o=>{
+      const on=st[o.k]===o.v;
+      return '<button class="pick flag'+(on?" on":"")+'" data-act="t-flag" data-k="'+o.k+'" data-v="'+o.v+
+        '" role="switch" aria-checked="'+on+'"><span class="flag-box">'+icon("i-check")+'</span>'+esc(o.name)+'</button>';
+    }).join("")+'</div>'+
+    '<div class="prio-out">'+(Q
+      ? '<span class="chip chip-q '+Q.cls+'">'+icon(Q.icon,"ic-14")+esc(Q.name)+'</span><span class="prio-note">'+esc(Q.note)+'</span>'
+      : '<span class="chip">Not prioritised</span><span class="prio-note">'+
+        (half?"Tick one from the other pair to place it in the matrix."
+             :"Tick how urgent and how important this is.")+'</span>')+
+    '</div>';
+}
+
 function taskModal(id,preset){
   const t=id?taskById(id):Object.assign({id:"",title:"",desc:"",due:"",cat:S.categories[0].id,status:"backlog",urgent:null,important:null,subtasks:[]},preset||{});
   if(!t)return;
@@ -746,16 +804,17 @@ function taskModal(id,preset){
       field("Status",'<select class="inp" id="tStatus">'+STATUSES.map(s=>'<option value="'+s.id+'"'+(t.status===s.id?" selected":"")+'>'+esc(s.name)+'</option>').join("")+'</select>')+
       field("Category",'<select class="inp" id="tCat">'+S.categories.map(c=>'<option value="'+c.id+'"'+(t.cat===c.id?" selected":"")+'>'+esc(c.name)+'</option>').join("")+'</select>')+
     '</div>'+
-    field("Priority — this places it in the Eisenhower matrix",'<div class="pickers" id="tPrio">'+
-      QUADS.map(Q=>'<button class="pick '+Q.cls+(quadOf(t)===Q.id?" on":"")+'" style="--c:var(--q)" data-act="t-quad" data-v="'+Q.id+'">'+icon(Q.icon)+esc(Q.name)+' <span style="color:var(--muted);font-weight:500">'+esc(Q.tag)+'</span></button>').join("")+
-      '<button class="pick'+(quadOf(t)?"":" on")+'" data-act="t-quad" data-v="">Not prioritised</button></div>')+
+    field("Priority — this places it in the Eisenhower matrix",'<div id="tPrio"></div>')+
     field("Subtasks",'<div id="tSubs">'+subs.map(s=>subRow(s)).join("")+'</div>'+
       '<button class="btn btn-sm" data-act="sub-add" style="margin-top:8px">'+icon("i-plus","ic-14")+'Add subtask</button>')+
     '</div>'+
     '<div class="mfoot"><span style="color:var(--muted);font-size:12px">'+(id?"Changes save when you hit save":"Added to your board, list and calendar")+'</span>'+
     '<div class="spacer" style="flex:1"></div><button class="btn" data-act="close">Cancel</button>'+
     '<button class="btn btn-primary" data-act="task-save" data-id="'+(id||"")+'">'+icon("i-check")+'Save task</button></div></div>');
-  el("modalRoot").dataset.quad=quadOf(t)||"";
+  const M=el("modalRoot");
+  M.dataset.urgent=flagVal(t.urgent);
+  M.dataset.important=flagVal(t.important);
+  renderPrio();
 }
 function quadName(t){const q=quadOf(t);return q?QUADS.find(x=>x.id===q).name:"Not prioritised";}
 function subRow(s){return '<div class="sub-row'+(s.d?" done":"")+'" data-sid="'+(s.id||uid("s"))+'">'+
@@ -847,10 +906,7 @@ function renderView(){
 function render(){renderRail();renderTopbar();renderView();}
 
 /* ============ actions ============ */
-function setQuad(t,q){
-  if(!q){t.urgent=null;t.important=null;return;}
-  t.urgent=(q==="do"||q==="delegate");t.important=(q==="do"||q==="decide");
-}
+const readFlag=v=>v===""?null:v==="1";
 function toggleTaskDone(id){
   const t=taskById(id);if(!t)return;
   if(t.status==="completed"){t.status="planned";t.completedAt=null;}
@@ -869,7 +925,8 @@ function saveTask(id){
   let t=id?taskById(id):null;
   if(t)Object.assign(t,data);
   else{t=Object.assign({id:uid("t"),created:TODAY(),completedAt:null,urgent:null,important:null},data);S.tasks.push(t);}
-  setQuad(t,M.dataset.quad||"");
+  t.urgent=readFlag(M.dataset.urgent||"");
+  t.important=readFlag(M.dataset.important||"");
   if(t.status==="completed"&&!t.completedAt)t.completedAt=TODAY();
   if(t.status!=="completed")t.completedAt=null;
   save("tasks");closeModal();render();toast(id?"Task updated":"Task added");
@@ -950,7 +1007,10 @@ document.addEventListener("click",function(e){
     case "new-task":taskModal(null,{due:n.dataset.date||"",status:n.dataset.status||"backlog"});break;
     case "task-save":saveTask(id||null);break;
     case "task-delete":if(arm(n,"Delete for good?")){S.tasks=S.tasks.filter(t=>t.id!==id);S.notes.forEach(x=>{x.actions=(x.actions||[]).filter(y=>y.taskId!==id);});save("tasks");save("notes");closeModal();render();toast("Task deleted");}break;
-    case "t-quad":M.dataset.quad=n.dataset.v;M.querySelectorAll('[data-act="t-quad"]').forEach(b=>b.classList.toggle("on",b.dataset.v===n.dataset.v));break;
+    case "t-flag":{const k=n.dataset.k;
+      // Ticking the opposite box replaces it; ticking the same one clears the axis.
+      M.dataset[k]=(M.dataset[k]===n.dataset.v)?"":n.dataset.v;
+      renderPrio();break;}
     case "sub-add":{const w=el("tSubs");w.insertAdjacentHTML("beforeend",subRow({id:uid("s"),t:"",d:false}));w.lastElementChild.querySelector("input").focus();break;}
     case "sub-toggle":n.classList.toggle("on");n.closest(".sub-row").classList.toggle("done");break;
     case "sub-del":n.closest(".sub-row").remove();break;

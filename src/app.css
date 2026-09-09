@@ -163,12 +163,32 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .ad-cell{border-right:1px solid var(--line);padding:5px 5px 7px;display:flex;flex-direction:column;gap:3px;min-height:34px}
 .ad-cell:last-child{border-right:0}
 .ad-cell.today{background:var(--surface)}
-.tchip{display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:7px;background:color-mix(in srgb,var(--c) 12%,var(--tint-base));border-left:2.5px solid var(--c);color:var(--ink);font-size:11.5px;font-weight:500;text-align:left;width:100%;min-width:0}
-.tchip:hover{background:color-mix(in srgb,var(--c) 20%,var(--tint-base))}
+/* Calendar entries share one treatment, the convention every calendar app
+   uses: a pale wash of the category colour, a hairline edge a few shades
+   deeper, and the label in a dark tone of the same hue rather than plain ink. */
+.tchip,.ev,.mchip{
+  --fill:color-mix(in srgb,var(--c) 10%,var(--tint-base));
+  --edge:color-mix(in srgb,var(--c) 55%,var(--tint-base));
+  --label:color-mix(in srgb,var(--c) 58%,var(--ink));
+  --fill-hover:color-mix(in srgb,var(--c) 18%,var(--tint-base));
+}
+.tchip{display:flex;align-items:center;gap:6px;padding:2px 5px;border-radius:7px;background:var(--fill);color:var(--label);font-size:11.5px;font-weight:500;text-align:left;width:100%;min-width:0}
+.tchip:hover{background:var(--fill-hover)}
 .tchip .ic{color:var(--c)}
-.tchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tchip.done{opacity:.55;text-decoration:line-through}
-.tchip.over{border-left-color:var(--danger);background:var(--danger-soft)}
+.tchip-body{display:flex;align-items:center;gap:5px;flex:1;min-width:0;text-align:left;color:inherit;font:inherit}
+.tchip-body span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The tick box is what makes it read as a task rather than an event. */
+.tchip-tick{width:14px;height:14px;border-radius:50%;flex:none;display:grid;place-items:center;border:1.5px solid var(--edge);background:var(--surface);transition:background .15s,border-color .15s}
+.tchip-tick:hover{border-color:var(--c)}
+.tchip-tick .ic{width:9px;height:9px;stroke:var(--on-accent);stroke-width:3;opacity:0}
+.tchip.done .tchip-tick{background:var(--c);border-color:var(--c)}
+.tchip.done .tchip-tick .ic{opacity:1}
+.tchip.done .tchip-body{text-decoration:line-through}
+.tchip.done{opacity:.6}
+/* Overdue takes over the chip's colour, so the icon follows the background
+   rather than staying on the category hue. */
+.tchip.over{--fill:var(--danger-soft);--fill-hover:color-mix(in srgb,var(--danger) 18%,var(--tint-base));--edge:color-mix(in srgb,var(--danger) 55%,var(--tint-base));--label:color-mix(in srgb,var(--danger) 58%,var(--ink))}
+.tchip.over .ic{color:var(--danger)}
 .grid-scroll{flex:1;overflow-y:auto;min-height:0}
 .tgrid{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));position:relative}
 .tcol-time{border-right:1px solid var(--line)}
@@ -178,10 +198,14 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .daycol.today{background:var(--surface-today)}
 .hourline{height:48px;border-bottom:1px solid var(--line)}
 .hourline.half{border-bottom-style:dashed;border-bottom-color:var(--line-soft)}
-.ev{position:absolute;left:3px;right:3px;border-radius:7px;padding:3px 6px;overflow:hidden;background:color-mix(in srgb,var(--c) 14%,var(--tint-base));border-left:2.5px solid var(--c);font-size:11px;text-align:left;color:var(--ink);min-height:18px}
-.ev:hover{background:color-mix(in srgb,var(--c) 22%,var(--tint-base));z-index:3}
+.ev{position:absolute;left:3px;right:3px;border-radius:7px;padding:3px 6px;overflow:hidden;background:var(--fill);border-left:2px solid var(--edge);font-size:11px;text-align:left;color:var(--label);min-height:18px}
+.ev:hover{background:var(--fill-hover);z-index:3}
 .ev b{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
-.ev i{font-style:normal;color:var(--muted);font-size:10.5px}
+.ev i{font-style:normal;color:color-mix(in srgb,var(--c) 42%,var(--muted));font-size:10.5px}
+/* Short blocks put the title and time on one line so neither is clipped. */
+.ev.sm{display:flex;align-items:center;gap:5px;padding:1px 6px;line-height:1.35}
+.ev.sm b{font-size:11px;flex:1 1 auto;min-width:0}
+.ev.sm i{flex:none;font-size:10px}
 .ev.done{opacity:.5}
 .ev.done b{text-decoration:line-through}
 .nowline{position:absolute;left:0;right:0;height:0;border-top:1.6px solid var(--danger);z-index:4;pointer-events:none}
@@ -199,7 +223,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .mdots{display:flex;gap:2.5px;margin-left:auto;padding-right:2px}
 .mdot{width:5px;height:5px;border-radius:50%;background:var(--c)}
 .mmore{font-size:10.5px;color:var(--faint);font-weight:600;text-align:left;padding-left:3px}
-.mchip{display:flex;align-items:center;gap:4px;font-size:10.5px;padding:1.5px 5px;border-radius:5px;background:color-mix(in srgb,var(--c) 12%,var(--tint-base));color:var(--ink);border-left:2px solid var(--c);text-align:left;min-width:0}
+.mchip{display:flex;align-items:center;gap:4px;font-size:10.5px;padding:1.5px 5px;border-radius:5px;background:var(--fill);color:var(--label);border-left:2px solid var(--edge);text-align:left;min-width:0}
 .mchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mchip.done{opacity:.5;text-decoration:line-through}
 
@@ -377,6 +401,17 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .pick:hover{border-color:var(--line-2)}
 .pick.on{border-color:transparent;background:color-mix(in srgb,var(--c,var(--accent)) 14%,var(--tint-base));color:var(--c,var(--accent-2))}
 .pick.on .ic{color:var(--c,var(--accent))}
+.pick > *{pointer-events:none}
+
+/* The urgent/important boxes: same pill, with a tick box like the sidebar. */
+.flag-box{width:14px;height:14px;border-radius:4px;flex:none;display:grid;place-items:center;
+  border:1.6px solid var(--line-2);background:var(--surface);transition:background .15s,border-color .15s}
+.flag-box .ic{width:10px;height:10px;stroke-width:3;opacity:0}
+.pick.on .flag-box{background:var(--accent);border-color:var(--accent)}
+.pick.on .flag-box .ic{stroke:var(--on-accent);opacity:1}
+
+.prio-out{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:10px}
+.prio-note{font-size:12px;color:var(--muted)}
 .sub-row{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--line)}
 .sub-row .t{flex:1;min-width:0}
 .sub-row input{border:0;outline:0;background:none;width:100%;font-size:13px}
