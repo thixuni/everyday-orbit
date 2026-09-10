@@ -73,72 +73,74 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     color-scheme: dark;
-    /* Charcoal, not black. The earlier ramp bottomed out near #14 and the
-       contrast against light text was harsh to sit in front of; these lift the
-       floor and shrink the gap between the ground and the panels on it. */
-    --ground:color-mix(in srgb,var(--a-lift) 5%,#1A1D1F);
-    --surface:color-mix(in srgb,var(--a-lift) 5%,#23272A);
-    --surface-2:color-mix(in srgb,var(--a-lift) 6%,#282D30);
-    --surface-3:color-mix(in srgb,var(--a-lift) 8%,#31373A);
-    --line:color-mix(in srgb,var(--a-lift) 9%,#3A4145);
-    --line-2:color-mix(in srgb,var(--a-lift) 12%,#4A5257);
-    /* Secondary text was the unreadable part: these clear 4.5:1 on --surface,
-       where the old --muted and --faint did not. */
-    --ink:color-mix(in srgb,var(--a-lift) 6%,#EDF0F1);
-    --ink-2:color-mix(in srgb,var(--a-lift) 7%,#CFD5D7);
-    --muted:color-mix(in srgb,var(--a-lift) 9%,#A7AFB2);
-    --faint:color-mix(in srgb,var(--a-lift) 10%,#8B9497);
+    /* Near-black ground, panels lifted off it. The apps this borrows from --
+       Notion, ClickUp, Gmail -- all sit a barely-lit page behind panels that are
+       a clear step above it; a mid-charcoal page has nothing to lift off. */
+    --ground:color-mix(in srgb,var(--a-lift) 4%,#0E1012);
+    --surface:color-mix(in srgb,var(--a-lift) 5%,#1C2023);
+    --surface-2:color-mix(in srgb,var(--a-lift) 6%,#22272A);
+    --surface-3:color-mix(in srgb,var(--a-lift) 8%,#2A3034);
+    --line:color-mix(in srgb,var(--a-lift) 9%,#333A3E);
+    --line-2:color-mix(in srgb,var(--a-lift) 12%,#454D51);
+    /* Text is measured against --surface, the panel it usually sits on:
+       ink 12.1, ink-2 9.1, muted 6.3, faint 4.7. */
+    --ink:color-mix(in srgb,var(--a-lift) 5%,#E6EAEB);
+    --ink-2:color-mix(in srgb,var(--a-lift) 6%,#C6CCCE);
+    --muted:color-mix(in srgb,var(--a-lift) 8%,#A2AAAD);
+    --faint:color-mix(in srgb,var(--a-lift) 9%,#878F92);
     --apricot:#EDA470;
     --danger:#E58270;
     --amber:#DDAE52;
     --blue:#7BA8DD;
-    --surface-today:color-mix(in srgb,var(--a-lift) 7%,#272C2F);
-    --line-soft:color-mix(in srgb,var(--a-lift) 7%,#31363A);
-    --scrim:rgba(8,10,11,.62);
+    --surface-today:color-mix(in srgb,var(--a-lift) 6%,#202529);
+    --line-soft:color-mix(in srgb,var(--a-lift) 7%,#282E31);
+    --scrim:rgba(0,0,0,.68);
     /* A struck-through line at .55 vanished on a dark ground. */
     --done-fade:.75;
-    --sh-1:0 1px 2px rgba(0,0,0,.3);
-    --sh-2:0 8px 24px -12px rgba(0,0,0,.55);
-    --sh-3:0 24px 60px -20px rgba(0,0,0,.66);
+    /* Deeper than light mode: a soft shadow does not register on near-black. */
+    --sh-1:0 1px 2px rgba(0,0,0,.42);
+    --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
+    --sh-3:0 24px 60px -20px rgba(0,0,0,.82);
     /* The lifted shade carries the accent here, so what sits on it goes dark. */
     --accent:var(--a-lift);
     --accent-2:var(--a-base);
-    --on-accent:#14171A;
+    --on-accent:#0E1113;
   }
 }
 :root[data-theme="dark"]{
   color-scheme: dark;
-  /* Charcoal, not black. The earlier ramp bottomed out near #14 and the
-     contrast against light text was harsh to sit in front of; these lift the
-     floor and shrink the gap between the ground and the panels on it. */
-  --ground:color-mix(in srgb,var(--a-lift) 5%,#1A1D1F);
-  --surface:color-mix(in srgb,var(--a-lift) 5%,#23272A);
-  --surface-2:color-mix(in srgb,var(--a-lift) 6%,#282D30);
-  --surface-3:color-mix(in srgb,var(--a-lift) 8%,#31373A);
-  --line:color-mix(in srgb,var(--a-lift) 9%,#3A4145);
-  --line-2:color-mix(in srgb,var(--a-lift) 12%,#4A5257);
-  /* Secondary text was the unreadable part: these clear 4.5:1 on --surface,
-     where the old --muted and --faint did not. */
-  --ink:color-mix(in srgb,var(--a-lift) 6%,#EDF0F1);
-  --ink-2:color-mix(in srgb,var(--a-lift) 7%,#CFD5D7);
-  --muted:color-mix(in srgb,var(--a-lift) 9%,#A7AFB2);
-  --faint:color-mix(in srgb,var(--a-lift) 10%,#8B9497);
+  /* Near-black ground, panels lifted off it. The apps this borrows from --
+     Notion, ClickUp, Gmail -- all sit a barely-lit page behind panels that are
+     a clear step above it; a mid-charcoal page has nothing to lift off. */
+  --ground:color-mix(in srgb,var(--a-lift) 4%,#0E1012);
+  --surface:color-mix(in srgb,var(--a-lift) 5%,#1C2023);
+  --surface-2:color-mix(in srgb,var(--a-lift) 6%,#22272A);
+  --surface-3:color-mix(in srgb,var(--a-lift) 8%,#2A3034);
+  --line:color-mix(in srgb,var(--a-lift) 9%,#333A3E);
+  --line-2:color-mix(in srgb,var(--a-lift) 12%,#454D51);
+  /* Text is measured against --surface, the panel it usually sits on:
+     ink 12.1, ink-2 9.1, muted 6.3, faint 4.7. */
+  --ink:color-mix(in srgb,var(--a-lift) 5%,#E6EAEB);
+  --ink-2:color-mix(in srgb,var(--a-lift) 6%,#C6CCCE);
+  --muted:color-mix(in srgb,var(--a-lift) 8%,#A2AAAD);
+  --faint:color-mix(in srgb,var(--a-lift) 9%,#878F92);
   --apricot:#EDA470;
   --danger:#E58270;
   --amber:#DDAE52;
   --blue:#7BA8DD;
-  --surface-today:color-mix(in srgb,var(--a-lift) 7%,#272C2F);
-  --line-soft:color-mix(in srgb,var(--a-lift) 7%,#31363A);
-  --scrim:rgba(8,10,11,.62);
+  --surface-today:color-mix(in srgb,var(--a-lift) 6%,#202529);
+  --line-soft:color-mix(in srgb,var(--a-lift) 7%,#282E31);
+  --scrim:rgba(0,0,0,.68);
   /* A struck-through line at .55 vanished on a dark ground. */
   --done-fade:.75;
-  --sh-1:0 1px 2px rgba(0,0,0,.3);
-  --sh-2:0 8px 24px -12px rgba(0,0,0,.55);
-  --sh-3:0 24px 60px -20px rgba(0,0,0,.66);
+  /* Deeper than light mode: a soft shadow does not register on near-black. */
+  --sh-1:0 1px 2px rgba(0,0,0,.42);
+  --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
+  --sh-3:0 24px 60px -20px rgba(0,0,0,.82);
   /* The lifted shade carries the accent here, so what sits on it goes dark. */
   --accent:var(--a-lift);
   --accent-2:var(--a-base);
-  --on-accent:#14171A;
+  --on-accent:#0E1113;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ff);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}

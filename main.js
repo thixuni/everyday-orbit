@@ -37,7 +37,7 @@ function createWindow(){
     title: 'Everyday Orbit',
     /* Only to avoid a white flash before the app paints; the app itself
        decides the theme. Follows the system, which is the usual case. */
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141815' : '#F3F5F1',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0E1012' : '#F3F5F1',
     icon: iconPath(),
     webPreferences: {
       contextIsolation: true, nodeIntegration: false, spellcheck: true,

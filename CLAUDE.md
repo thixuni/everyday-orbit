@@ -128,12 +128,25 @@ The neutrals are not fixed greys either: each is a pure grey with a trace of
 the accent mixed in, so the greys shift with the hue. Fixed green-grey
 neutrals looked wrong the moment the accent was not green.
 
+Dark is a near-black `--ground` with panels a clear step above it, the way
+Notion, ClickUp and Gmail build theirs. A mid-charcoal page was tried first
+and read as washed out: nothing can lift off a ground that is already halfway
+up the ramp. Text is measured against `--surface`, not `--ground`, because
+that is the panel it actually sits on — ink 12.1, muted 6.3, faint 4.7.
+
 Anything tinted is derived with `color-mix()` from `--surface`, never
 written twice, which is why `--tint-base` is a variable. Add a soft colour the
 same way or it will be wrong in one of the two themes. An accent names three
 shades and nothing more: on white the mid shade takes white text, on a dark
 ground it vanishes, so the light shade becomes `--accent` and `--on-accent`
 goes dark.
+
+`src/timer.html` is a second window with its own stylesheet, so it cannot see
+any of this. It is *told*: `syncTimerWindow()` sends the resolved theme as
+`dark` in the payload and the window sets `data-theme` from it. That is why
+changing the theme, changing the accent and the OS flipping at dusk all call
+`syncTimerWindow()` — the media query in that file is only what shows before
+the first message lands.
 
 ## Conventions that exist for a reason
 

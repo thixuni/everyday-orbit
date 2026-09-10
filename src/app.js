@@ -773,6 +773,11 @@ const ACCENTS=[
 const THEMES=[{id:"light",name:"Light",icon:"i-sun"},{id:"dark",name:"Dark",icon:"i-moon"},
   {id:"system",name:"System",icon:"i-laptop"}];
 
+/* What the ramp resolved to, which "system" only knows by asking. The timer
+   is a second window with its own stylesheet, so it has to be told. */
+const isDark=()=>{const t=(S.prefs&&S.prefs.theme)||"system";
+  return t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme:dark)").matches);};
+
 function applyAppearance(){
   const r=document.documentElement,p=S.prefs||{};
   const theme=p.theme||"system";
@@ -1280,8 +1285,8 @@ document.addEventListener("click",function(e){
     case "welcome-sample":startWith(sampleState());toast("Sample week loaded — clear it any time from Settings");break;
     case "welcome-empty":startWith(blankState());toast("Ready — add your first task");break;
     case "settings":settingsModal();break;
-    case "set-theme":S.prefs.theme=n.dataset.v;save("prefs");applyAppearance();settingsModal();break;
-    case "set-accent":S.prefs.accent=n.dataset.v;save("prefs");applyAppearance();settingsModal();break;
+    case "set-theme":S.prefs.theme=n.dataset.v;save("prefs");applyAppearance();syncTimerWindow();settingsModal();break;
+    case "set-accent":S.prefs.accent=n.dataset.v;save("prefs");applyAppearance();syncTimerWindow();settingsModal();break;
     case "backup-dir":pickBackupFolder();break;
     case "load-sample":{const keep=S.prefs;S=sampleState();S.prefs=Object.assign(S.prefs,keep,{setup:true});KEYS.forEach(function(k){touched[k]=true;save(k);});closeModal();applyAppearance();render();toast("Sample week loaded");break;}
     case "reset-all":if(arm(n,"Clear everything?")){
@@ -1999,11 +2004,12 @@ function removeDocFromVault(d){
 function syncTimerWindow(){
   const o=desktop();if(!o||!o.timer)return;
   const r=running();
-  if(!r){try{o.timer({state:"idle"});}catch(e){}return;}
+  const dark=isDark();
+  if(!r){try{o.timer({state:"idle",dark:dark});}catch(e){}return;}
   const t=taskById(r.task);if(!t)return;
   const est=tEst(t)*60,secs=liveSecs();
   try{o.timer({state:r.since?"running":"paused",title:t.title,task:t.id,
-    secs:secs,est:est,colour:cat(t.cat).color,over:est>0&&secs>est});}catch(e){}
+    secs:secs,est:est,colour:cat(t.cat).color,over:est>0&&secs>est,dark:dark});}catch(e){}
 }
 
 /* ============ time analytics ============ */
@@ -2057,6 +2063,9 @@ else{maybeWelcome();connect();}
 /* The theme is applied before anything draws, so there is no flash of the
    wrong one on a dark setup. */
 applyAppearance();
+/* On "system" the OS can change the theme under us at dusk. The page follows
+   by itself through the media query; the timer window has to be told. */
+try{matchMedia("(prefers-color-scheme:dark)").addEventListener("change",syncTimerWindow);}catch(e){}
 if(S.prefs&&S.prefs.launch&&NAV.some(v=>v.id===S.prefs.launch)){V.view=S.prefs.launch;render();}
 maybeAutoBackup();
 setInterval(()=>{if(V.view==="calendar"&&V.calMode==="week"&&!el("modalRoot").innerHTML)renderView();},60000);
