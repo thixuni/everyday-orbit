@@ -117,7 +117,8 @@ function sampleState(){
   });
   st.notes=[
    {id:uid("n"),title:"How this planner works",cat:"personal",tags:["start-here"],pinned:true,updated:Date.now(),
-    html:"<p>Five sections, all sharing the same tasks and categories.</p>"+
+    html:"<p>Six sections, all sharing the same tasks and categories.</p>"+
+      "<h2>Dashboard</h2><p>Today on one page: tasks due today, today’s routines, anything overdue or missed, open action items from your notes, and a scratch pad for a quick thought.</p>"+
       "<h2>Calendar</h2><p>Your default view. Tasks sit in the band across the top, routines sit in the time grid. The <b>Catch-up</b> panel on the right collects anything overdue so you can clear it in one place.</p>"+
       "<h2>Tasks</h2><p>A board you can drag cards across, or a list grouped by month. Quick filters sit on one row, and Advanced opens status, category, priority and date range.</p>"+
       "<h2>Matrix</h2><p>Every task lands in a quadrant based on whether it is urgent, important, both or neither. Closest due date comes first. Anything you have not judged yet waits in the tray at the bottom.</p>"+
@@ -252,9 +253,11 @@ const V={view:"calendar",calMode:"week",anchor:today(),taskMode:"board",q:"",odO
   f:{quick:"open",status:"",cat:"",quad:"",from:"",to:"",sort:"due"},noteId:null,noteTag:""};
 
 /* ============ rail + topbar ============ */
-const NAV=[{id:"calendar",name:"Calendar",icon:"i-calendar"},{id:"tasks",name:"Tasks",icon:"i-board"},
+const NAV=[{id:"dashboard",name:"Dashboard",icon:"i-dash"},{id:"calendar",name:"Calendar",icon:"i-calendar"},{id:"tasks",name:"Tasks",icon:"i-board"},
  {id:"matrix",name:"Matrix",icon:"i-grid"},{id:"routines",name:"Routines",icon:"i-repeat"},{id:"notes",name:"Notes",icon:"i-note"}];
 function navCount(id){
+  if(id==="dashboard"){const d=todayItems();
+    return d.tasks.filter(isOpen).length+d.routines.filter(r=>!doneR(r,TODAY())).length;}
   if(id==="calendar"){const o=overdueItems();return o.tasks.length+o.miss.length;}
   if(id==="tasks")return S.tasks.filter(isOpen).length;
   if(id==="matrix")return S.tasks.filter(t=>isOpen(t)&&quadOf(t)==="do").length;
@@ -285,7 +288,13 @@ function topSearch(ph){
 function renderTopbar(){
   const open=S.tasks.filter(isOpen),over=S.tasks.filter(isOverdue);
   let title="",sub="",right="";
-  if(V.view==="calendar"){
+  if(V.view==="dashboard"){
+    const d=todayItems(),left=d.tasks.filter(isOpen).length+d.routines.filter(r=>!doneR(r,TODAY())).length;
+    title="Dashboard";
+    sub=today().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"})+
+      " · "+(left?left+" left to do today":"nothing left for today");
+    right='<button class="btn btn-primary" data-act="new-task" data-date="'+TODAY()+'">'+icon("i-plus")+'New task</button>';
+  }else if(V.view==="calendar"){
     title="Calendar";
     sub=V.calMode==="week"?"Week of "+fmtDate(ymd(startOfWeek(V.anchor))):MON[V.anchor.getMonth()]+" "+V.anchor.getFullYear();
     right=topSearch("Search tasks and routines")+'<button class="btn btn-primary" data-act="new-task">'+icon("i-plus")+'New task</button>';
@@ -463,6 +472,104 @@ function overduePanel(){
   }
   return '<aside class="overdue">'+head+'<div class="od-body">'+body+'</div></aside>';
 }
+/* ============ dashboard ============ */
+/* One page for today: what is due, what repeats, what slipped, and somewhere
+   to put a thought without going to Notes. Nothing here is its own data --
+   the scratch pad is the same one Notes opens, and every list is read
+   straight from tasks, routines and notes. */
+function todayItems(){
+  const ts=TODAY();
+  /* Open first, finished at the bottom, where they read as progress rather
+     than as clutter. */
+  const tasks=S.tasks.filter(t=>t.due===ts&&visibleCat(t.cat)&&t.status!=="dropped")
+    .sort((a,b)=>(isOpen(a)?0:1)-(isOpen(b)?0:1));
+  const routines=S.routines.filter(r=>visibleCat(r.cat)&&routineOn(r,today()))
+    .sort((a,b)=>(a.time||"99")<(b.time||"99")?-1:1);
+  return {tasks:tasks,routines:routines};
+}
+/* Open action items from notes that nothing else on the page already shows.
+   One due today is in Today and one overdue is in Overdue; listing it twice
+   would make one piece of work look like two. */
+function noteActionItems(){
+  const ts=TODAY(),out=[];
+  S.notes.forEach(n=>(n.actions||[]).forEach(a=>{
+    const t=a.taskId?taskById(a.taskId):null;
+    if(t){
+      if(!isOpen(t)||!visibleCat(t.cat))return;
+      if(t.due===ts||isOverdue(t))return;
+    }else if(a.done)return;
+    out.push({n:n,a:a,t:t});
+  }));
+  /* Soonest first; anything with no date waits at the end. */
+  return out.sort((x,y)=>((x.t&&x.t.due)||"9999")<((y.t&&y.t.due)||"9999")?-1:1);
+}
+function dashRow(o){
+  return '<div class="drow'+(o.done?" done":"")+'" style="--c:'+o.color+'">'+o.tick+
+    '<button class="drow-body" '+o.open+'><b>'+esc(o.title)+'</b>'+
+    (o.meta?'<small><i class="cdot"></i>'+o.meta+'</small>':"")+'</button>'+
+    (o.end?'<span class="drow-end'+(o.late?" late":o.behind?" behind":"")+'">'+o.end+'</span>':"")+'</div>';
+}
+function dashGroup(title,count,rows,empty){
+  return '<div class="dgroup"><h3>'+esc(title)+(count?'<span class="num">'+count+'</span>':"")+'</h3>'+
+    (rows||'<p class="dempty">'+esc(empty)+'</p>')+'</div>';
+}
+/* Past this many, missed routines fold away behind "Show more": they are the
+   least actionable thing on the page and ten of them hid everything below. */
+const MISS_SHOWN=4;
+function viewDashboard(){
+  const ts=TODAY(),d=todayItems(),nowMin=new Date().getHours()*60+new Date().getMinutes();
+  const mins=tm=>{if(!tm)return -1;const x=tm.split(":").map(Number);return x[0]*60+x[1];};
+
+  const taskRow=t=>{const c=cat(t.cat),done=t.status==="completed",est=tEst(t);
+    return dashRow({color:c.color,done:done,tick:tickBtn(t),open:'data-act="task" data-id="'+t.id+'"',title:t.title,
+      meta:esc(c.name)+(est?' · '+esc(fmtDur(est*60))+' estimate':"")});};
+  const routineRow=r=>{const c=cat(r.cat),done=doneR(r,ts);
+    /* A routine whose time has come and gone without a tick says so -- in
+       amber, not red. It is behind, not missed; there is still today. */
+    const behind=!done&&r.time&&mins(r.time)+(r.dur||0)<nowMin;
+    return dashRow({color:c.color,done:done,behind:behind,
+      tick:'<button class="tick'+(done?" on":"")+'" data-act="routine-done" data-id="'+r.id+'" data-date="'+ts+'" aria-label="'+(done?"Mark not done":"Mark done")+'">'+icon("i-check")+'</button>',
+      open:'data-act="routine" data-id="'+r.id+'" data-date="'+ts+'"',title:r.title,meta:esc(c.name),
+      end:r.time?esc(fmtTime(r.time)):""});};
+
+  const openT=d.tasks.filter(isOpen).length,leftR=d.routines.filter(r=>!doneR(r,ts)).length;
+  const todayCard='<section class="dcard dash-today"><header class="dcard-h"><h2>Today</h2></header>'+
+    dashGroup("Tasks due today",openT,d.tasks.map(taskRow).join(""),"Nothing due today.")+
+    dashGroup("Routines",leftR,d.routines.map(routineRow).join(""),"No routines fall on today.")+
+    '</section>';
+
+  const o=overdueItems(),ai=noteActionItems();
+  const need=o.tasks.length+o.miss.length+ai.length;
+  const attn='<section class="dcard dash-attn"><header class="dcard-h"><h2>Needs your attention</h2>'+
+      (need?'<span class="dcount num">'+need+'</span>':"")+'</header>'+
+    (!need?'<div class="dclear">'+icon("i-check")+'<p>You’re all caught up. Nothing overdue, nothing missed.</p></div>':
+      (o.tasks.length?dashGroup("Overdue tasks",o.tasks.length,o.tasks.map(t=>{const c=cat(t.cat);
+        return dashRow({color:c.color,tick:tickBtn(t),open:'data-act="task" data-id="'+t.id+'"',title:t.title,
+          meta:esc(c.name),end:esc(relDue(t.due)),late:true});}).join("")):"")+
+      (ai.length?dashGroup("From your notes",ai.length,ai.map(x=>{
+        const c=cat(x.t?x.t.cat:x.n.cat);
+        return dashRow({color:c.color,
+          tick:'<button class="tick" data-act="ai-done" data-nid="'+x.n.id+'" data-id="'+x.a.id+'" aria-label="Mark done">'+icon("i-check")+'</button>',
+          open:'data-act="dash-note" data-id="'+x.n.id+'" title="Open the note"',title:x.a.t,
+          meta:'In '+esc(x.n.title||"Untitled note"),end:x.t&&x.t.due?esc(relDue(x.t.due)):""});}).join("")):"")+
+      (o.miss.length?dashGroup("Missed routines",o.miss.length,(V.dashAll?o.miss:o.miss.slice(0,MISS_SHOWN)).map(x=>{const c=cat(x.r.cat);
+        return dashRow({color:c.color,
+          tick:'<button class="tick" data-act="routine-done" data-id="'+x.r.id+'" data-date="'+x.date+'" aria-label="Mark done">'+icon("i-check")+'</button>',
+          open:'data-act="routine" data-id="'+x.r.id+'" data-date="'+x.date+'"',title:x.r.title,meta:esc(c.name),
+          end:esc(fmtDate(x.date))});}).join("")+
+        (o.miss.length>MISS_SHOWN?'<button class="dmore" data-act="dash-more">'+(V.dashAll?"Show fewer":"Show "+(o.miss.length-MISS_SHOWN)+" more")+'</button>':"")):""))+
+    '</section>';
+
+  const scratch='<section class="dcard dash-scratch"><header class="dcard-h"><h2>Scratch pad</h2>'+
+      '<small>Saves as you type</small></header>'+
+    '<div class="rte-bar">'+["bold|B","italic|I","insertUnorderedList|•"].map(x=>{const q=x.split("|");
+      return '<button data-act="rte" data-cmd="'+q[0]+'" data-scratch="1" aria-label="'+q[0]+'">'+q[1]+'</button>';}).join("")+'</div>'+
+    '<div class="rte" id="scratchPad" contenteditable="true" data-ph="Anything you need out of your head…">'+(S.prefs.scratch||"")+'</div>'+
+    '</section>';
+
+  return '<div class="dash"><div class="dash-col">'+todayCard+attn+'</div>'+scratch+'</div>';
+}
+
 function viewCalendar(){
   const week=V.calMode==="week";
   /* Hours tracked in the week on screen, so the total sits with the blocks it
@@ -1155,9 +1262,10 @@ function scratchModal(){
 
 /* ============ render ============ */
 function renderView(){
-  const vp=el("viewport"),flush=(V.view==="calendar"||V.view==="notes"||V.view==="tasks");
+  const vp=el("viewport"),flush=(V.view==="calendar"||V.view==="notes"||V.view==="tasks"||V.view==="dashboard");
   vp.className="viewport"+(flush?" flush":"");
-  if(V.view==="calendar")vp.innerHTML=viewCalendar();
+  if(V.view==="dashboard")vp.innerHTML=viewDashboard();
+  else if(V.view==="calendar")vp.innerHTML=viewCalendar();
   else if(V.view==="tasks")vp.innerHTML=V.taskMode==="board"?viewBoard():viewList();
   else if(V.view==="matrix")vp.innerHTML=viewMatrix();
   else if(V.view==="routines")vp.innerHTML=viewRoutines();
@@ -1375,6 +1483,8 @@ document.addEventListener("click",function(e){
     case "new-note":{const nn={id:uid("n"),title:"",cat:S.categories[0].id,tags:[],pinned:false,html:"",actions:[],updated:Date.now()};
       S.notes.unshift(nn);V.view="notes";V.noteId=nn.id;V.q="";save("notes");render();const ti=el("noteTitle");if(ti)ti.focus();break;}
     case "note-open":V.noteId=id;renderView();break;
+    case "dash-more":V.dashAll=!V.dashAll;renderView();break;
+    case "dash-note":V.view="notes";V.noteId=id;V.q="";render();break;
     case "note-tag":V.noteTag=n.dataset.v;renderView();break;
     case "note-pin":{const x=noteById(id);x.pinned=!x.pinned;x.updated=Date.now();save("notes");renderView();break;}
     case "note-delete":if(arm(n,"Delete note?")){S.notes=S.notes.filter(x=>x.id!==id);V.noteId=null;save("notes");render();toast("Note deleted — tasks it created stay");}break;

@@ -62,7 +62,7 @@ Rendering is full innerHTML replacement, no virtual DOM:
 - `renderView()` redraws only the viewport. Call for filter and search changes so
   the search box keeps focus.
 
-Each view is a function returning an HTML string: `viewCalendar`, `viewBoard`,
+Each view is a function returning an HTML string: `viewDashboard`, `viewCalendar`, `viewBoard`,
 `viewList`, `viewMatrix`, `viewRoutines`, `viewNotes`.
 
 The task detail panel is a **second root**, `#sheetRoot`, drawn by
@@ -115,6 +115,17 @@ Time tracking stores one `S.sessions` row per run. A task total is always
 summed from those rows, never cached on the task. The timer in flight lives in
 `prefs.running` so it survives a reload, and it is paused rather than resumed
 on start-up, so a timer left running overnight does not bank the hours.
+
+### Dashboard
+
+`viewDashboard` is today on one page and owns no data of its own. The
+scratch pad is the same `prefs.scratch` that Notes opens, "Needs your
+attention" reuses `overdueItems()` — the calendar's Catch-up panel — and
+`noteActionItems()` reads open action items straight from `S.notes`. An
+action item already due today or overdue is left out of "From your notes",
+because it is on the page once already; showing it twice would make one
+piece of work look like two. Missed routines fold away past `MISS_SHOWN`:
+they are the least actionable thing there, and ten of them buried the rest.
 
 ### Settings
 

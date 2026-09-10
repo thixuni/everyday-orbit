@@ -34,6 +34,18 @@ test('index.html links the split assets exactly once each', () => {
   assert.strictEqual((html.match(/<script src="app\.js"><\/script>/g) || []).length, 1);
 });
 
+test('the scripts parse as JavaScript', () => {
+  // Every other check reads the sources as text, so a stray bracket would
+  // pass all of them while the app itself could not start.
+  const vm = require('vm');
+  for (const f of ['src/app.js', 'main.js', 'preload.js']) {
+    assert.doesNotThrow(() => new vm.Script(read(f), { filename: f }), f + ' has a syntax error');
+  }
+  const inline = (read('src/timer.html').match(/<script>([\s\S]*?)<\/script>/) || [])[1];
+  assert.ok(inline, 'timer.html has no inline script');
+  assert.doesNotThrow(() => new vm.Script(inline, { filename: 'timer.html' }), 'timer.html script has a syntax error');
+});
+
 test('app.js is wrapped in an IIFE so it leaks nothing global', () => {
   assert.match(js.trimStart(), /^\(function\s*\(\s*\)\s*\{/);
   assert.match(js.trimEnd(), /\}\)\(\);$/);

@@ -1,8 +1,8 @@
 # Everyday Orbit
 
-A personal planner: calendar, task board, Eisenhower matrix, routines, notes and
-time tracking. Five views over one set of tasks, sharing one set of categories
-that work like calendar layers.
+A personal planner: a dashboard for today, calendar, task board, Eisenhower
+matrix, routines, notes and time tracking. Six views over one set of tasks,
+sharing one set of categories that work like calendar layers.
 
 Open any task and a panel slides in from the right with its dates, priority,
 tags, linked tasks, files, an estimate, a timer and a full history of everything
