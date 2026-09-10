@@ -1,4 +1,4 @@
-const {app, BrowserWindow, Menu, Tray, shell, dialog, ipcMain, screen} = require('electron');
+const {app, BrowserWindow, Menu, Tray, shell, dialog, ipcMain, screen, nativeTheme} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const KEY = 'everyday-orbit-v1';
@@ -35,7 +35,9 @@ function createWindow(){
   win = new BrowserWindow({
     width: 1360, height: 880, minWidth: 940, minHeight: 600,
     title: 'Everyday Orbit',
-    backgroundColor: '#F3F5F1',
+    /* Only to avoid a white flash before the app paints; the app itself
+       decides the theme. Follows the system, which is the usual case. */
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141815' : '#F3F5F1',
     icon: iconPath(),
     webPreferences: {
       contextIsolation: true, nodeIntegration: false, spellcheck: true,
@@ -152,6 +154,24 @@ ipcMain.on('timer:pop', () => {
   if(w.isDestroyed()) return;
   if(!w.isVisible()) w.showInactive();
   w.webContents.send('timer:cmd', lastTimerState);
+});
+
+/* --------------------------------------------------------------- backups */
+
+ipcMain.handle('backup:dir', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Where should backups go?',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  return (r.canceled || !r.filePaths[0]) ? "" : r.filePaths[0];
+});
+/* Fire and forget: a backup that fails must never interrupt the planner. */
+ipcMain.on('backup:write', (e, job) => {
+  if(!job || !job.dir || !job.name) return;
+  try{
+    fs.mkdirSync(job.dir, {recursive: true});
+    fs.writeFileSync(path.join(job.dir, job.name), String(job.text || ''), 'utf8');
+  }catch(err){}
 });
 
 /* ------------------------------------------------------------ vault sync */

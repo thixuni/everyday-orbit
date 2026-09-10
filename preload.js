@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('orbit', {
   saveFile: p => { try{ return ipcRenderer.sendSync('file:save', p); }catch(e){ return null; } },
   openFile: p => ipcRenderer.send('file:open', p),
 
+  /* ---- automatic backups ---- */
+  chooseBackupDir: () => ipcRenderer.invoke("backup:dir"),
+  writeBackup: job => ipcRenderer.send("backup:write", job),
+
   /* ---- the floating timer ---- */
   timer:    state => ipcRenderer.send('timer:state', state),
   popTimer: ()    => ipcRenderer.send('timer:pop'),

@@ -116,6 +116,21 @@ summed from those rows, never cached on the task. The timer in flight lives in
 `prefs.running` so it survives a reload, and it is paused rather than resumed
 on start-up, so a timer left running overnight does not bank the hours.
 
+### Theme and accent
+
+Two things vary independently: the neutral ramp (light or dark) and the accent
+hue. Both live as attributes on the root element — `data-theme` and
+`data-accent` — set by `applyAppearance()` from `prefs`. Theme "system"
+sets no attribute at all, which is the only way the media query can keep
+tracking the OS.
+
+Anything tinted is derived with `color-mix()` from `--surface`, never
+written twice, which is why `--tint-base` is a variable. Add a soft colour the
+same way or it will be wrong in one of the two themes. An accent names three
+shades and nothing more: on white the mid shade takes white text, on a dark
+ground it vanishes, so the light shade becomes `--accent` and `--on-accent`
+goes dark.
+
 ## Conventions that exist for a reason
 
 - **Icons and labels inside a clickable row need `pointer-events: none`.** Clicks

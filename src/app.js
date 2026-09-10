@@ -9,7 +9,13 @@ const pad=n=>String(n).padStart(2,"0");
 const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const parseD=s=>{const p=String(s).split("-").map(Number);return new Date(p[0],p[1]-1,p[2]);};
 const addDays=(d,n)=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()+n);return x;};
-const startOfWeek=d=>addDays(d,-((d.getDay()+6)%7));
+/* Which weekday a week starts on, 0=Sunday..6=Saturday. Monday unless asked. */
+const weekStart=()=>{const v=S&&S.prefs?Number(S.prefs.weekStart):1;return isNaN(v)?1:Math.min(6,Math.max(0,v));};
+const startOfWeek=d=>addDays(d,-((d.getDay()-weekStart()+7)%7));
+const clock24=()=>!!(S&&S.prefs&&S.prefs.clock24);
+/* DOWS is written Monday-first; these are the seven columns as displayed. */
+const dowLabels=()=>{const out=[],w=weekStart();
+  for(let i=0;i<7;i++)out.push(DOWS[((w+i)+6)%7]);return out;};
 const today=()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),n.getDate());};
 const TODAY=()=>ymd(today());
 const dayDiff=(a,b)=>Math.round((parseD(a)-parseD(b))/864e5);
@@ -18,7 +24,9 @@ const MONS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","D
 const DOWS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const icon=(n,c)=>'<svg class="ic '+(c||"")+'" aria-hidden="true"><use href="#'+n+'"/></svg>';
 const fmtDate=s=>{if(!s)return"";const d=parseD(s);return d.getDate()+" "+MONS[d.getMonth()]+(d.getFullYear()!==today().getFullYear()?" "+d.getFullYear():"");};
-const fmtTime=t=>{if(!t)return"";const[h,m]=t.split(":").map(Number);const ap=h>=12?"pm":"am";const hh=h%12===0?12:h%12;return hh+(m?":"+pad(m):"")+ap;};
+const fmtTime=t=>{if(!t)return"";const[h,m]=t.split(":").map(Number);
+  if(clock24())return pad(h)+":"+pad(m);
+  const ap=h>=12?"pm":"am",hh=h%12===0?12:h%12;return hh+(m?":"+pad(m):"")+ap;};
 /* "9–9:45am" — the trailing am/pm is dropped from the start when both ends
    share it, which is how calendars write a range. */
 const fmtRange=(t,dur)=>{
@@ -68,8 +76,10 @@ function baseCategories(){
 function blankState(){
   return {categories:baseCategories(),tasks:[],routines:[],notes:[],completions:{},
     activity:[],docs:[],sessions:[],
-    prefs:{hidden:[],scratch:"",owner:"",setup:false,vault:"",
-      timer:{pomo:false,work:60,brk:15},running:null}};
+    prefs:{hidden:[],scratch:"",setup:false,vault:"",
+      theme:"system",accent:"green",weekStart:1,clock24:false,launch:"calendar",
+      autoBackup:{on:false,dir:"",every:"week",last:0},
+      running:null}};
 }
 /* Tasks gained fields over time; older saved tasks predate them. Read through
    these rather than assuming the field is there. */
@@ -257,7 +267,7 @@ function navCount(id){
 function closeRail(){document.body.classList.remove("rail-open");}
 
 function renderRail(){
-  const bs=el("brandSub");if(bs)bs.textContent=(S.prefs&&S.prefs.owner)?S.prefs.owner:"Personal planner";
+  const bs=el("brandSub");if(bs)bs.textContent="Personal planner";
   el("nav").innerHTML=NAV.map(n=>{const c=navCount(n.id);
     return '<button class="nav-btn" data-act="view" data-view="'+n.id+'" aria-current="'+(V.view===n.id)+'" title="'+esc(n.name)+'">'+icon(n.icon,"ic-18")+'<span>'+esc(n.name)+'</span>'+(c?'<span class="count num">'+c+'</span>':'')+'</button>';}).join("");
   const hid=hiddenCats().length;
@@ -420,17 +430,20 @@ function monthGrid(){
     const d=addDays(start,i),s=ymd(d);
     const ts=tasksFor(s);
     const evs=eventsFor(d);
-    const dots=[];evs.forEach(e=>{const c=cat(e.r.cat).color;if(dots.indexOf(c)===-1&&dots.length<4)dots.push(c);});
+    const dots=[];evs.forEach(e=>{const c=cat(e.kind==="session"?e.t.cat:e.r.cat).color;
+      if(dots.indexOf(c)===-1&&dots.length<4)dots.push(c);});
+    const routines=evs.filter(e=>e.kind!=="session"),tracked=evs.filter(e=>e.kind==="session");
     const show=ts.slice(0,2),parts=[];
     if(ts.length-show.length>0)parts.push((ts.length-show.length)+" more");
-    if(evs.length)parts.push(evs.length+" routine"+(evs.length===1?"":"s"));
+    if(routines.length)parts.push(routines.length+" routine"+(routines.length===1?"":"s"));
+    if(tracked.length)parts.push(fmtDur(tracked.reduce((n,e)=>n+(e.s.secs||0),0))+" tracked");
     const more=parts.join(" · ");
     cells+='<div class="mcell'+(d.getMonth()!==m?" out":"")+(s===tstr?" today":"")+'" data-act="new-task" data-date="'+s+'">'+
       '<div class="mtop"><span class="mnum num">'+d.getDate()+'</span><span class="mdots">'+dots.map(c=>'<span class="mdot" style="--c:'+c+'"></span>').join("")+'</span></div>'+
       show.map(t=>{const c=cat(t.cat);return '<button class="mchip'+(t.status==="completed"?" done":"")+'" style="--c:'+c.color+'" data-act="task" data-id="'+t.id+'" data-stop="1"><span>'+esc(t.title)+'</span></button>';}).join("")+
       (more?'<button class="mmore" data-act="peek" data-date="'+s+'" data-stop="1">'+esc(more)+'</button>':"")+'</div>';
   }
-  return '<div class="mhead">'+DOWS.map(d=>'<div>'+d+'</div>').join("")+'</div><div class="mgrid">'+cells+'</div>';
+  return '<div class="mhead">'+dowLabels().map(d=>'<div>'+d+'</div>').join("")+'</div><div class="mgrid">'+cells+'</div>';
 }
 function overduePanel(){
   const o=overdueItems(),n=o.tasks.length+o.miss.length;
@@ -729,7 +742,7 @@ function welcomeModal(){
     '<h2>Everyday Orbit</h2>'+
     '<p>A calendar, a task board, an Eisenhower matrix, routines and notes — all sharing one set of categories, so a task you write once shows up wherever you look for it.</p></div>'+
     '<div class="mbody">'+
-    field("What should the sidebar call this planner?",'<input class="inp" id="ownerName" placeholder="Your name" maxlength="24">')+
+
     '<div class="wel-choice">'+
       '<button class="btn btn-primary" data-act="welcome-sample">'+icon("i-sparkle")+'Load a sample week</button>'+
       '<button class="btn" data-act="welcome-empty">Start empty</button>'+
@@ -739,52 +752,147 @@ function welcomeModal(){
     '</div>'+
     '<div class="mfoot"><span class="wel-fine" style="margin:0">Everything you enter stays in this browser on this device. Use the backup icon in the sidebar to save a copy or move it to another computer.</span></div>'+
     '</div></div>';
-  const f=el("ownerName");if(f)setTimeout(function(){f.focus();},60);
 }
 function closeWelcome(){if(welcomeOpen){welcomeOpen=false;closeModal();}}
 function startWith(state){
-  const nm=(el("ownerName")&&el("ownerName").value||"").trim();
-  S=state;S.prefs.owner=nm;S.prefs.setup=true;
+  S=state;S.prefs.setup=true;
   KEYS.forEach(function(k){touched[k]=true;save(k);});
   welcomeOpen=false;closeModal();render();
 }
+/* ============ appearance ============ */
+/* Theme and accent live on the root element, so a change is one attribute and
+   the whole app follows. "system" sets nothing and lets the media query
+   decide, which is the only way to track the OS switching at dusk. */
+const ACCENTS=[
+  {id:"green", name:"Green"},
+  {id:"blue",  name:"Blue"},
+  {id:"violet",name:"Violet"},
+  {id:"rose",  name:"Rose"},
+  {id:"amber", name:"Amber"},
+  {id:"slate", name:"Slate"}];
+const THEMES=[{id:"light",name:"Light",icon:"i-sun"},{id:"dark",name:"Dark",icon:"i-moon"},
+  {id:"system",name:"System",icon:"i-laptop"}];
+
+function applyAppearance(){
+  const r=document.documentElement,p=S.prefs||{};
+  const theme=p.theme||"system";
+  if(theme==="system")r.removeAttribute("data-theme");
+  else r.setAttribute("data-theme",theme);
+  r.setAttribute("data-accent",p.accent||"green");
+}
+
+/* ============ settings ============ */
 function settingsModal(){
   const n=S.tasks.length+S.routines.length+S.notes.length;
+  const p=S.prefs||{};
+  const row=(label,inner,note)=>'<div class="set-row"><div class="set-lab">'+esc(label)+
+    (note?'<small>'+esc(note)+'</small>':"")+'</div><div class="set-val">'+inner+'</div></div>';
+
+  const themePick='<div class="seg">'+THEMES.map(t=>
+    '<button data-act="set-theme" data-v="'+t.id+'" aria-pressed="'+((p.theme||"system")===t.id)+'">'+
+    icon(t.icon,"ic-14")+esc(t.name)+'</button>').join("")+'</div>';
+
+  const accentPick='<div class="accents">'+ACCENTS.map(a=>
+    '<button class="accent-dot'+((p.accent||"green")===a.id?" on":"")+'" data-accent="'+a.id+'" '+
+    'data-act="set-accent" data-v="'+a.id+'" title="'+esc(a.name)+'" aria-label="'+esc(a.name)+'"'+
+    ' aria-pressed="'+((p.accent||"green")===a.id)+'"></button>').join("")+'</div>';
+
+  const days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const weekPick='<select class="inp" data-act="set-pref" data-k="weekStart">'+
+    [1,0,6].concat([2,3,4,5]).map(d=>'<option value="'+d+'"'+(weekStart()===d?" selected":"")+'>'+days[d]+'</option>').join("")+'</select>';
+
+  const launchPick='<select class="inp" data-act="set-pref" data-k="launch">'+
+    NAV.map(v=>'<option value="'+v.id+'"'+((p.launch||"calendar")===v.id?" selected":"")+'>'+esc(v.name)+'</option>').join("")+'</select>';
+
+  const clockPick='<label class="switch"><input type="checkbox" data-act="set-pref" data-k="clock24"'+
+    (p.clock24?" checked":"")+'><span></span><i>'+(p.clock24?"14:30":"2:30pm")+'</i></label>';
+
+  const bk=p.autoBackup||{};
+  const backup=hasDesktop()
+    ? '<label class="switch"><input type="checkbox" data-act="set-pref" data-k="autoBackup.on"'+(bk.on?" checked":"")+'><span></span>'+
+      '<i>'+(bk.on?(bk.dir?"Into "+esc(bk.dir):"Choose a folder"):"Off")+'</i></label>'+
+      (bk.on?'<div class="set-sub"><select class="inp inp-sm" data-act="set-pref" data-k="autoBackup.every">'+
+        [["day","Every day"],["week","Every week"],["month","Every month"]].map(x=>
+          '<option value="'+x[0]+'"'+((bk.every||"week")===x[0]?" selected":"")+'>'+x[1]+'</option>').join("")+'</select>'+
+        '<button class="btn btn-sm" data-act="backup-dir">'+icon("i-folder","ic-14")+(bk.dir?"Change folder":"Choose folder")+'</button>'+
+        (bk.last?'<span class="mnone">Last '+esc(relTime(bk.last))+'</span>':'<span class="mnone">Not run yet</span>')+
+        '</div>':"")
+    : '<span class="mnone">Automatic backups need the desktop app</span>';
+
   openModal('<div class="modal narrow" role="dialog" aria-modal="true" aria-label="Settings">'+
     '<div class="mhead2">'+icon("i-settings","ic-18")+'<h2>Settings</h2><button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div>'+
     '<div class="mbody">'+
-    field("Planner name in the sidebar",'<input class="inp" id="ownerName2" value="'+esc(S.prefs.owner||"")+'" placeholder="Your name" maxlength="24">')+
-    '<div>'+
-      '<div class="sec-label" style="margin-bottom:6px">Your data</div>'+
-      '<p style="margin:0 0 10px;color:var(--ink-2)">'+n+' item'+(n===1?"":"s")+' saved in this browser'+(db?", synced to your account":"")+'. Back it up before clearing your browsing data, or to move it to another computer.</p>'+
-      '<div style="display:flex;gap:7px;flex-wrap:wrap">'+
-        '<button class="btn btn-sm" data-act="export">'+icon("i-download","ic-14")+'Back up to a file</button>'+
-        '<button class="btn btn-sm" data-act="import">'+icon("i-upload","ic-14")+'Restore a backup</button>'+
+
+    '<div class="set-group"><div class="sec-label">Appearance</div>'+
+      row("Theme",themePick,"System follows Windows")+
+      row("Accent colour",accentPick)+
+    '</div>'+
+
+    '<div class="set-group"><div class="sec-label">Dates and times</div>'+
+      row("Week starts on",weekPick)+
+      row("24-hour clock",clockPick)+
+      row("Open the planner on",launchPick)+
+    '</div>'+
+
+    '<div class="set-group"><div class="sec-label">Connections</div>'+
+      row("Obsidian vault",
+        (hasDesktop()
+          ? '<div class="set-sub">'+
+            '<button class="btn btn-sm" data-act="vault-pick">'+icon("i-folder","ic-14")+(vaultPath()?"Change":"Connect")+'</button>'+
+            (vaultPath()?'<button class="btn btn-sm" data-act="vault-open">'+icon("i-pop","ic-14")+'Open</button>':"")+
+            (vaultPath()?'<button class="btn btn-sm btn-danger" data-act="vault-forget">Disconnect</button>':"")+
+            '</div>'
+          : '<span class="mnone">Vault sync needs the desktop app</span>'),
+        vaultPath()?vaultPath()+"/Everyday Orbit":"Documents are written as .md, both ways")+
+      row("Google Calendar",
+        '<button class="btn btn-sm" disabled>'+icon("i-calendar","ic-14")+'Not connected</button>',
+        "Two-way sync is being built — not available yet")+
+    '</div>'+
+
+    '<div class="set-group"><div class="sec-label">Your data</div>'+
+      row("Backup",'<div class="set-sub">'+
+        '<button class="btn btn-sm" data-act="export">'+icon("i-download","ic-14")+'Back up now</button>'+
+        '<button class="btn btn-sm" data-act="import">'+icon("i-upload","ic-14")+'Restore</button>'+
         (n===0?'<button class="btn btn-sm" data-act="load-sample">'+icon("i-sparkle","ic-14")+'Load the sample week</button>':"")+
-      '</div>'+
+        '</div>', n+" item"+(n===1?"":"s")+" saved on this device")+
+      row("Automatic backups",backup)+
+      row("Clear everything",
+        '<button class="btn btn-sm btn-danger" data-act="reset-all">'+icon("i-trash","ic-14")+'Clear everything</button>',
+        "Removes every task, routine, note, document and tracked hour")+
     '</div>'+
-    (hasDesktop()?'<div>'+
-      '<div class="sec-label" style="margin-bottom:6px">Obsidian vault</div>'+
-      '<p style="margin:0 0 10px;color:var(--ink-2)">'+(vaultPath()
-        ? 'Documents are mirrored into <b>'+esc(vaultPath())+'/Everyday Orbit</b>. Edits you make in Obsidian come back here.'
-        : 'Pick your vault and every document is written there as a .md file, both ways.')+'</p>'+
-      '<div style="display:flex;gap:7px;flex-wrap:wrap">'+
-        '<button class="btn btn-sm" data-act="vault-pick">'+icon("i-folder","ic-14")+(vaultPath()?"Change vault":"Connect a vault")+'</button>'+
-        (vaultPath()?'<button class="btn btn-sm" data-act="vault-open">'+icon("i-pop","ic-14")+'Open the folder</button>':"")+
-        (vaultPath()?'<button class="btn btn-sm btn-danger" data-act="vault-forget">Disconnect</button>':"")+
-      '</div>'+
-    '</div>':"")+
-    '<div>'+
-      '<div class="sec-label" style="margin-bottom:6px">Start over</div>'+
-      '<p style="margin:0 0 10px;color:var(--ink-2)">Clears every task, routine and note and returns the categories to their defaults. Back up first if you might want any of it.</p>'+
-      '<button class="btn btn-sm btn-danger" data-act="reset-all">'+icon("i-trash","ic-14")+'Clear everything</button>'+
-    '</div>'+
-    '</div><div class="mfoot"><span style="color:var(--muted);font-size:12px">Everyday Orbit · version 1.0</span>'+
-    '<div class="spacer" style="flex:1"></div><button class="btn btn-primary" data-act="settings-save">Save</button></div></div>');
+
+    '</div><div class="mfoot"><span class="mnone">Everyday Orbit</span>'+
+    '<div class="spacer" style="flex:1"></div><button class="btn btn-primary" data-act="close">Done</button></div></div>');
 }
 
 /* ============ backup + restore ============ */
 let pendingImport=null;
+/* ---- automatic backups ---- */
+const BACKUP_EVERY={day:864e5,week:7*864e5,month:30*864e5};
+function pickBackupFolder(){
+  const o=desktop();if(!o||!o.chooseBackupDir)return;
+  Promise.resolve(o.chooseBackupDir()).then(dir=>{
+    if(!dir)return;
+    S.prefs.autoBackup=Object.assign({on:true,every:"week",last:0},S.prefs.autoBackup||{},{dir:dir});
+    save("prefs");settingsModal();toast("Backups will be written to "+dir);
+  }).catch(()=>{});
+}
+/* Runs at most once a launch, and only when the interval has actually passed. */
+function maybeAutoBackup(){
+  const o=desktop();if(!o||!o.writeBackup)return;
+  const b=S.prefs&&S.prefs.autoBackup;
+  if(!b||!b.on||!b.dir)return;
+  const gap=BACKUP_EVERY[b.every||"week"]||BACKUP_EVERY.week;
+  if(b.last&&Date.now()-b.last<gap)return;
+  const payload={app:"everyday-orbit",version:1,exported:new Date().toISOString(),data:{}};
+  KEYS.forEach(k=>{payload.data[k]=S[k];});
+  try{
+    o.writeBackup({dir:b.dir,name:"everyday-orbit-"+TODAY()+".json",text:JSON.stringify(payload,null,2)});
+    S.prefs.autoBackup=Object.assign({},b,{last:Date.now()});
+    save("prefs");
+  }catch(e){}
+}
+
 function exportData(){
   const payload={app:"everyday-orbit",version:1,exported:new Date().toISOString(),data:{}};
   KEYS.forEach(k=>{payload.data[k]=S[k];});
@@ -918,11 +1026,13 @@ function catEditModal(id){
 }
 function peekModal(date){
   const ts=tasksFor(date),evs=eventsFor(parseD(date));
+  const routines=evs.filter(e=>e.kind!=="session"),tracked=evs.filter(e=>e.kind==="session");
   openModal('<div class="modal narrow" role="dialog" aria-modal="true" aria-label="Day">'+
     '<div class="mhead2"><h2>'+esc(parseD(date).toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))+'</h2>'+
     '<button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div><div class="mbody">'+
     (ts.length?'<div><div class="sec-label" style="margin-bottom:6px">Tasks</div>'+ts.map(t=>'<div class="qrow" data-act="task" data-id="'+t.id+'">'+tickBtn(t)+'<div class="t"><b>'+esc(t.title)+'</b></div>'+catChip(t.cat)+'</div>').join("")+'</div>':"")+
-    (evs.length?'<div><div class="sec-label" style="margin-bottom:6px">Routines</div>'+evs.map(e=>'<div class="qrow"><button class="tick'+(e.done?" on":"")+'" data-act="routine-done" data-id="'+e.r.id+'" data-date="'+date+'" aria-label="Toggle">'+icon("i-check")+'</button><div class="t"><b>'+esc(e.r.title)+'</b></div><span class="chip num">'+esc(fmtTime(e.r.time))+'</span></div>').join("")+'</div>':"")+
+    (routines.length?'<div><div class="sec-label" style="margin-bottom:6px">Routines</div>'+routines.map(e=>'<div class="qrow"><button class="tick'+(e.done?" on":"")+'" data-act="routine-done" data-id="'+e.r.id+'" data-date="'+date+'" aria-label="Toggle">'+icon("i-check")+'</button><div class="t"><b>'+esc(e.r.title)+'</b></div><span class="chip num">'+esc(fmtTime(e.r.time))+'</span></div>').join("")+'</div>':"")+
+    (tracked.length?'<div><div class="sec-label" style="margin-bottom:6px">Time tracked</div>'+tracked.map(e=>'<div class="qrow">'+icon("i-timer","ic-14")+'<div class="t"><b>'+esc(e.t.title)+'</b></div><span class="chip num">'+esc(fmtDur(e.s.secs))+'</span></div>').join("")+'</div>':"")+
     (!ts.length&&!evs.length?'<div class="empty">'+icon("i-calendar")+'<p>Nothing scheduled. A clear day.</p></div>':"")+
     '</div><div class="mfoot"><button class="btn btn-primary" data-act="new-task" data-date="'+date+'">'+icon("i-plus")+'Add task</button><div class="spacer" style="flex:1"></div><button class="btn" data-act="close">Close</button></div></div>');
 }
@@ -1170,10 +1280,19 @@ document.addEventListener("click",function(e){
     case "welcome-sample":startWith(sampleState());toast("Sample week loaded — clear it any time from Settings");break;
     case "welcome-empty":startWith(blankState());toast("Ready — add your first task");break;
     case "settings":settingsModal();break;
-    case "settings-save":{const v=(el("ownerName2").value||"").trim();S.prefs.owner=v;save("prefs");closeModal();render();toast("Settings saved");break;}
-    case "load-sample":{const nm=S.prefs.owner;S=sampleState();S.prefs.owner=nm;KEYS.forEach(function(k){touched[k]=true;save(k);});closeModal();render();toast("Sample week loaded");break;}
-    case "reset-all":if(arm(n,"Clear everything?")){const nm=S.prefs.owner;S=blankState();S.prefs.owner=nm;S.prefs.setup=true;
-      KEYS.forEach(function(k){touched[k]=true;save(k);});V.noteId=null;closeModal();render();toast("Cleared — a fresh start");}break;
+    case "set-theme":S.prefs.theme=n.dataset.v;save("prefs");applyAppearance();settingsModal();break;
+    case "set-accent":S.prefs.accent=n.dataset.v;save("prefs");applyAppearance();settingsModal();break;
+    case "backup-dir":pickBackupFolder();break;
+    case "load-sample":{const keep=S.prefs;S=sampleState();S.prefs=Object.assign(S.prefs,keep,{setup:true});KEYS.forEach(function(k){touched[k]=true;save(k);});closeModal();applyAppearance();render();toast("Sample week loaded");break;}
+    case "reset-all":if(arm(n,"Clear everything?")){
+      /* Your settings are not your data: the theme, the accent and the vault
+         you connected survive a clear-out. */
+      const keep=S.prefs;
+      S=blankState();
+      S.prefs=Object.assign(S.prefs,keep,{setup:true,running:null});
+      KEYS.forEach(function(k){touched[k]=true;save(k);});
+      V.noteId=null;V.sheet=null;closeModal();applyAppearance();render();renderSheet();
+      toast("Cleared — a fresh start");}break;
     case "export":exportData();break;
     case "import":el("importFile").value="";el("importFile").click();break;
     case "import-apply":applyImport();break;
@@ -1261,6 +1380,14 @@ document.addEventListener("change",function(e){
   const t=e.target;
   if(t.id==="importFile"){importPicked(t.files&&t.files[0]);return;}
   if(t.dataset&&t.dataset.act==="f"){V.f[t.dataset.k]=t.value;renderView();return;}
+  if(t.dataset&&t.dataset.act==="set-pref"){
+    const k=t.dataset.k,v=t.type==="checkbox"?t.checked:t.value;
+    if(k.indexOf(".")>-1){const[a,b]=k.split(".");
+      S.prefs[a]=Object.assign({},S.prefs[a]||{});S.prefs[a][b]=v;
+      if(a==="autoBackup"&&b==="on"&&v&&!S.prefs.autoBackup.dir)pickBackupFolder();
+    }else S.prefs[k]=(k==="weekStart")?Number(v):v;
+    save("prefs");applyAppearance();render();settingsModal();return;
+  }
   if(t.dataset&&t.dataset.act==="sh-set"){
     const k=t.dataset.k;let v=t.value;
     if(k==="est")v=Math.max(0,parseInt(v,10)||0);
@@ -1927,6 +2054,11 @@ function applyVaultChange(d){
    so a slow connection can never invite someone to overwrite existing data. */
 if(window.claude&&window.claude.use)connect().then(maybeWelcome,maybeWelcome);
 else{maybeWelcome();connect();}
+/* The theme is applied before anything draws, so there is no flash of the
+   wrong one on a dark setup. */
+applyAppearance();
+if(S.prefs&&S.prefs.launch&&NAV.some(v=>v.id===S.prefs.launch)){V.view=S.prefs.launch;render();}
+maybeAutoBackup();
 setInterval(()=>{if(V.view==="calendar"&&V.calMode==="week"&&!el("modalRoot").innerHTML)renderView();},60000);
 
 /* The clock ticks in place. A full render every second would fight anything

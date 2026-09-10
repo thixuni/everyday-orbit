@@ -63,11 +63,20 @@ test('every data-act is handled somewhere', () => {
 });
 
 test('colours come from tokens, not hardcoded hex in rules', () => {
-  // Everything before the first closing brace of :root is the token block.
-  const tokenBlockEnd = css.indexOf('}');
-  const rules = css.slice(tokenBlockEnd);
-  const stray = [...rules.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map(m => m[0]);
-  assert.deepStrictEqual(stray, [], 'hardcoded colours outside :root: ' + stray.join(', '));
+  // A token block is any rule whose declarations are all custom properties —
+  // :root, the accent hues, the dark ramp. Literal colours belong only there;
+  // everywhere else must go through var().
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const stray = [];
+  for (const m of bare.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = m[1].trim().split('\n').pop().trim();
+    for (const decl of m[2].split(';')) {
+      if (!/#[0-9a-fA-F]{3,8}\b/.test(decl)) continue;
+      if (decl.trim().startsWith('--')) continue;    // defining a token is the point
+      stray.push(selector + ' → ' + decl.trim());
+    }
+  }
+  assert.deepStrictEqual(stray, [], 'hardcoded colours outside a token block:\n  ' + stray.join('\n  '));
 });
 
 test('the state keys are the ones persistence knows about', () => {
@@ -136,6 +145,7 @@ test('everything reaching the shell goes through the preload bridge', () => {
     chooseVault: 'vault:choose', forgetVault: 'vault:forget',
     openVault: 'vault:open', useVault: 'vault:use',
     writeDoc: 'doc:write', deleteDoc: 'doc:delete', onVaultChange: 'vault:changed',
+    chooseBackupDir: 'backup:dir', writeBackup: 'backup:write',
     timer: 'timer:state', popTimer: 'timer:pop', onTimerCmd: 'timer:cmd'
   };
   for (const [member, channel] of Object.entries(surface)) {
