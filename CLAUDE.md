@@ -116,6 +116,16 @@ summed from those rows, never cached on the task. The timer in flight lives in
 `prefs.running` so it survives a reload, and it is paused rather than resumed
 on start-up, so a timer left running overnight does not bank the hours.
 
+### Settings
+
+Settings is a sidebar of sections with one pane open at a time — the tab
+list is `SET_TABS`, and the open tab lives in `V.setTab` because which tab
+you were on is not a setting. Every change redraws settings, so when the modal
+is already open `settingsModal()` swaps its insides rather than calling
+`openModal()` again; opening it afresh would replay the pop-in animation on
+every toggle, the same flicker the task panel once had. The modal has a fixed
+height so switching tabs does not make it jump.
+
 ### Theme and accent
 
 Two things vary independently: the neutral ramp (light or dark) and the accent

@@ -38,6 +38,9 @@
   --scrim:rgba(24,28,26,.38);
   /* How far a finished thing fades. Dark needs far less, or it disappears. */
   --done-fade:.55;
+  /* A switch that is off. White reads on a light grey track; on a dark one
+     it would be the pane's own colour and vanish, so dark uses a grey. */
+  --knob:var(--surface);
 
   /* Derived once, so nothing below needs a light and a dark spelling. */
   --accent-soft:color-mix(in srgb,var(--accent) 13%,var(--surface));
@@ -101,6 +104,7 @@
     --scrim:rgba(0,0,0,.68);
     /* A struck-through line at .55 vanished on a dark ground. */
     --done-fade:.75;
+  --knob:var(--muted);
     /* Deeper than light mode: a soft shadow does not register on near-black. */
     --sh-1:0 1px 2px rgba(0,0,0,.42);
     --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
@@ -137,6 +141,7 @@
   --scrim:rgba(0,0,0,.68);
   /* A struck-through line at .55 vanished on a dark ground. */
   --done-fade:.75;
+  --knob:var(--muted);
   /* Deeper than light mode: a soft shadow does not register on near-black. */
   --sh-1:0 1px 2px rgba(0,0,0,.42);
   --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
@@ -621,27 +626,47 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .modal-sm{width:min(420px,94vw)}
 
 /* ---------- settings ----------
-   Two columns of cards rather than one long column: the whole of settings is
-   meant to be in front of you at once, with nothing to scroll past. The
-   columns collapse to one below 900px, and only then may it scroll. */
-.modal.settings{width:min(920px,96vw);max-height:min(94dvh,960px)}
-.modal.settings .mbody{padding:15px}
-.set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
-.set-group{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-m);
-  padding:12px 15px 4px}
-.set-group .sec-label{display:block;margin-bottom:4px}
-.set-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;
-  padding:9px 0;border-top:1px solid var(--line-soft)}
-.set-row:first-of-type{border-top:0}
-.set-row.stack{grid-template-columns:minmax(0,1fr)}
-.set-row.stack .set-val{align-items:stretch}
-.set-lab{font-size:13px;font-weight:500;color:var(--ink)}
-.set-lab small{display:block;font-size:11.5px;font-weight:400;color:var(--muted);margin-top:2px}
-.set-val{display:flex;flex-direction:column;align-items:flex-end;gap:7px;min-width:0}
-.set-val .inp{min-width:150px}
-.set-sub{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
-@media (max-width:900px){
-  .set-grid{grid-template-columns:minmax(0,1fr)}
+   A sidebar of sections and one pane open at a time, the way Notion Calendar
+   lays its settings out. The modal has a fixed height so that switching tabs
+   does not make it jump; a pane scrolls inside itself if it ever needs to. */
+.modal.settings{width:min(900px,96vw);height:min(600px,92dvh);max-height:none;
+  display:grid;grid-template-columns:224px minmax(0,1fr)}
+.set-nav{display:flex;flex-direction:column;gap:2px;padding:16px 10px 12px;overflow-y:auto;
+  background:color-mix(in srgb,var(--ground) 55%,var(--surface));border-right:1px solid var(--line)}
+.set-nav-h{font-size:11.5px;font-weight:600;color:var(--faint);padding:14px 10px 6px}
+.set-nav-h:first-child{padding-top:2px}
+.set-tab{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;
+  font-size:13.5px;font-weight:500;color:var(--ink-2);text-align:left;width:100%}
+.set-tab > *{pointer-events:none}
+.set-tab .ic{color:var(--muted)}
+.set-tab:hover{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+.set-tab[aria-selected="true"]{background:color-mix(in srgb,var(--ink) 9%,transparent);color:var(--ink)}
+.set-tab[aria-selected="true"] .ic{color:var(--ink)}
+.set-nav-foot{margin-top:auto;padding:10px 10px 2px;font-size:11.5px;color:var(--faint)}
+
+.set-pane{position:relative;overflow-y:auto;padding:28px 36px 32px;min-width:0}
+.set-close{position:absolute;top:14px;right:14px}
+.set-sec{padding-bottom:24px;margin-bottom:24px;border-bottom:1px solid var(--line)}
+.set-sec:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.set-sec h3{font-size:17px;font-weight:600;margin:0 0 14px}
+.set-field{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.set-field + .set-field{margin-top:18px}
+.set-flabel{font-size:13px;font-weight:500;color:var(--ink)}
+.set-help{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted);max-width:54ch}
+.set-help b{font-weight:600;color:var(--ink-2);word-break:break-all}
+.set-field .inp{width:230px}
+.set-field .inp-sm{width:auto}
+.set-pane .switch i{font-size:13.5px;color:var(--ink)}
+.set-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.set-field .accent-note{width:218px}
+
+/* Narrow: the sidebar turns into a strip of tabs across the top. */
+@media (max-width:700px){
+  .modal.settings{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .set-nav{flex-direction:row;overflow-x:auto;padding:8px;border-right:0;border-bottom:1px solid var(--line)}
+  .set-nav-h,.set-nav-foot{display:none}
+  .set-tab{width:auto;white-space:nowrap}
+  .set-pane{padding:22px 20px 24px}
 }
 
 /* Each swatch paints itself from --dot, set inline: the palette lives in
@@ -678,11 +703,11 @@ input.accent-custom.empty::-webkit-color-swatch{opacity:0}
 .switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;font-size:12.5px;color:var(--muted)}
 .switch input{position:absolute;opacity:0;width:0;height:0}
 .switch span{width:38px;height:22px;border-radius:20px;background:var(--surface-3);
-  border:1px solid var(--line);position:relative;flex:none;transition:background .15s,border-color .15s}
+  border:1px solid var(--line-2);position:relative;flex:none;transition:background .15s,border-color .15s}
 .switch span::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
-  background:var(--surface);box-shadow:var(--sh-1);transition:transform .15s}
+  background:var(--knob);box-shadow:var(--sh-1);transition:transform .15s,background .15s}
 .switch input:checked + span{background:var(--accent);border-color:var(--accent)}
-.switch input:checked + span::after{transform:translateX(16px)}
+.switch input:checked + span::after{transform:translateX(16px);background:var(--on-accent)}
 .switch input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
 .switch i{font-style:normal}
 .tm-total{cursor:help;border-bottom:1px dotted var(--line-2)}

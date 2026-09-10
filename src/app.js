@@ -699,8 +699,11 @@ function viewNotes(){
 
 /* ============ modals ============ */
 function closeModal(){el("modalRoot").innerHTML="";}
-function openModal(html){
+function openModal(html,opt){
   el("modalRoot").innerHTML='<div class="scrim" data-scrim="1">'+html+'</div>';
+  /* Settings has no first field worth focusing: the ring that landed on its
+     first select read as a fault, not a convenience. */
+  if(opt&&opt.focus===false)return;
   const f=el("modalRoot").querySelector("input,textarea,select");if(f)setTimeout(()=>f.focus(),40);
 }
 /* Native confirm()/prompt() are blocked inside the sandboxed artifact frame,
@@ -848,93 +851,127 @@ function applyAppearance(){
 }
 
 /* ============ settings ============ */
+/* A sidebar of sections with one pane open at a time, rather than every
+   setting stacked in one long column. The open pane lives in V, not prefs:
+   which tab you were on is not a setting. */
+const SET_TABS=[
+  {group:"Preferences"},
+  {id:"appearance", name:"Appearance",     icon:"i-palette"},
+  {id:"dates",      name:"Dates and times",icon:"i-clock"},
+  {group:"Your planner"},
+  {id:"connections",name:"Connections",    icon:"i-link"},
+  {id:"data",       name:"Your data",      icon:"i-folder"}];
+
 function settingsModal(){
   const n=S.tasks.length+S.routines.length+S.notes.length;
   const p=S.prefs||{};
-  const row=(label,inner,note,cls)=>'<div class="set-row'+(cls?" "+cls:"")+'"><div class="set-lab">'+esc(label)+
-    (note?'<small>'+esc(note)+'</small>':"")+'</div><div class="set-val">'+inner+'</div></div>';
-  const group=(title,rows)=>'<div class="set-group"><div class="sec-label">'+esc(title)+'</div>'+rows+'</div>';
+  const tab=SET_TABS.some(t=>t.id===V.setTab)?V.setTab:"appearance";
 
-  const themePick='<div class="seg">'+THEMES.map(t=>
-    '<button data-act="set-theme" data-v="'+t.id+'" aria-pressed="'+((p.theme||"system")===t.id)+'">'+
-    icon(t.icon,"ic-14")+esc(t.name)+'</button>').join("")+'</div>';
+  const sec=(title,body)=>'<div class="set-sec"><h3>'+esc(title)+'</h3>'+body+'</div>';
+  const field=(label,control,help)=>'<div class="set-field">'+
+    (label?'<div class="set-flabel">'+esc(label)+'</div>':"")+control+
+    (help?'<p class="set-help">'+help+'</p>':"")+'</div>';
+  const toggle=(k,on,label)=>'<label class="switch"><input type="checkbox" data-act="set-pref" data-k="'+k+'"'+
+    (on?" checked":"")+'><span></span><i>'+esc(label)+'</i></label>';
 
-  /* A swatch shows the shade the theme in force would actually use, so what
-     you press is what you get rather than the light-mode version of it. */
-  const dark=isDark(),cur=p.accent||"green",curHex=accentHex();
-  const shade=h=>{const t=accentTrio(h);return dark?t.lift:t.base;};
-  const swatch=a=>'<button class="accent-dot'+(cur===a.id?" on":"")+'" style="--dot:'+shade(a.hex)+'"'+
-    ' data-act="set-accent" data-v="'+a.id+'" title="'+esc(a.name)+'" aria-label="'+esc(a.name)+'"'+
-    ' aria-pressed="'+(cur===a.id)+'"></button>';
-  const accentPick='<div class="accents">'+ACCENTS.map(swatch).join("")+
-    '<input type="color" class="accent-dot accent-custom'+(cur==="custom"?" on":" empty")+'"'+
-      ' style="--dot:'+shade(curHex)+'" value="'+esc(curHex)+'" data-act="set-accent-hex"'+
-      ' title="Any colour you like" aria-label="Custom accent colour"></div>'+
-    '<div class="accent-note"><span>'+(cur==="custom"?"Your own colour":
-      esc((ACCENTS.filter(a=>a.id===cur)[0]||ACCENTS[0]).name))+'</span><b>'+esc(curHex)+'</b></div>';
+  let pane="";
+  if(tab==="appearance"){
+    const themePick='<div class="seg">'+THEMES.map(t=>
+      '<button data-act="set-theme" data-v="'+t.id+'" aria-pressed="'+((p.theme||"system")===t.id)+'">'+
+      icon(t.icon,"ic-14")+esc(t.name)+'</button>').join("")+'</div>';
 
-  const days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  const weekPick='<select class="inp" data-act="set-pref" data-k="weekStart">'+
-    [1,0,6].concat([2,3,4,5]).map(d=>'<option value="'+d+'"'+(weekStart()===d?" selected":"")+'>'+days[d]+'</option>').join("")+'</select>';
+    /* A swatch shows the shade the theme in force would actually use, so what
+       you press is what you get rather than the light-mode version of it. */
+    const dark=isDark(),cur=p.accent||"green",curHex=accentHex();
+    const shade=h=>{const t=accentTrio(h);return dark?t.lift:t.base;};
+    const swatch=a=>'<button class="accent-dot'+(cur===a.id?" on":"")+'" style="--dot:'+shade(a.hex)+'"'+
+      ' data-act="set-accent" data-v="'+a.id+'" title="'+esc(a.name)+'" aria-label="'+esc(a.name)+'"'+
+      ' aria-pressed="'+(cur===a.id)+'"></button>';
+    const accentPick='<div class="accents">'+ACCENTS.map(swatch).join("")+
+      '<input type="color" class="accent-dot accent-custom'+(cur==="custom"?" on":" empty")+'"'+
+        ' style="--dot:'+shade(curHex)+'" value="'+esc(curHex)+'" data-act="set-accent-hex"'+
+        ' title="Any colour you like" aria-label="Custom accent colour"></div>'+
+      '<div class="accent-note"><span>'+(cur==="custom"?"Your own colour":
+        esc((ACCENTS.filter(a=>a.id===cur)[0]||ACCENTS[0]).name))+'</span><b>'+esc(curHex)+'</b></div>';
 
-  const launchPick='<select class="inp" data-act="set-pref" data-k="launch">'+
-    NAV.map(v=>'<option value="'+v.id+'"'+((p.launch||"calendar")===v.id?" selected":"")+'>'+esc(v.name)+'</option>').join("")+'</select>';
+    pane=sec("Theme",field("",themePick,"System follows Windows, and switches when it does."))+
+      sec("Accent colour",field("",accentPick,
+        "The last circle takes any colour you like. Whatever you pick is adjusted just enough to keep the text on it readable."));
+  }
+  else if(tab==="dates"){
+    const days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    const weekPick='<select class="inp" data-act="set-pref" data-k="weekStart">'+
+      [1,0,6].concat([2,3,4,5]).map(d=>'<option value="'+d+'"'+(weekStart()===d?" selected":"")+'>'+days[d]+'</option>').join("")+'</select>';
+    const launchPick='<select class="inp" data-act="set-pref" data-k="launch">'+
+      NAV.map(v=>'<option value="'+v.id+'"'+((p.launch||"calendar")===v.id?" selected":"")+'>'+esc(v.name)+'</option>').join("")+'</select>';
 
-  const clockPick='<label class="switch"><input type="checkbox" data-act="set-pref" data-k="clock24"'+
-    (p.clock24?" checked":"")+'><span></span><i>'+(p.clock24?"14:30":"2:30pm")+'</i></label>';
-
-  const bk=p.autoBackup||{};
-  const backup=hasDesktop()
-    ? '<label class="switch"><input type="checkbox" data-act="set-pref" data-k="autoBackup.on"'+(bk.on?" checked":"")+'><span></span>'+
-      '<i>'+(bk.on?(bk.dir?"Into "+esc(bk.dir):"Choose a folder"):"Off")+'</i></label>'+
-      (bk.on?'<div class="set-sub"><select class="inp inp-sm" data-act="set-pref" data-k="autoBackup.every">'+
-        [["day","Every day"],["week","Every week"],["month","Every month"]].map(x=>
-          '<option value="'+x[0]+'"'+((bk.every||"week")===x[0]?" selected":"")+'>'+x[1]+'</option>').join("")+'</select>'+
-        '<button class="btn btn-sm" data-act="backup-dir">'+icon("i-folder","ic-14")+(bk.dir?"Change folder":"Choose folder")+'</button>'+
-        (bk.last?'<span class="mnone">Last '+esc(relTime(bk.last))+'</span>':'<span class="mnone">Not run yet</span>')+
-        '</div>':"")
-    : '<span class="mnone">Automatic backups need the desktop app</span>';
-
-  openModal('<div class="modal settings" role="dialog" aria-modal="true" aria-label="Settings">'+
-    '<div class="mhead2">'+icon("i-settings","ic-18")+'<h2>Settings</h2><button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div>'+
-    '<div class="mbody"><div class="set-grid">'+
-
-    group("Appearance",
-      row("Theme",themePick,"System follows Windows")+
-      row("Accent colour",accentPick,"Any of these, or a colour of your own",'stack'))+
-
-    group("Dates and times",
-      row("Week starts on",weekPick)+
-      row("24-hour clock",clockPick)+
-      row("Open the planner on",launchPick))+
-
-    group("Connections",
-      row("Obsidian vault",
-        (hasDesktop()
-          ? '<div class="set-sub">'+
-            '<button class="btn btn-sm" data-act="vault-pick">'+icon("i-folder","ic-14")+(vaultPath()?"Change":"Connect")+'</button>'+
-            (vaultPath()?'<button class="btn btn-sm" data-act="vault-open">'+icon("i-pop","ic-14")+'Open</button>':"")+
-            (vaultPath()?'<button class="btn btn-sm btn-danger" data-act="vault-forget">Disconnect</button>':"")+
-            '</div>'
-          : '<span class="mnone">Vault sync needs the desktop app</span>'),
-        vaultPath()?vaultPath()+"/Everyday Orbit":"Documents are written as .md, both ways")+
-      row("Google Calendar",
+    pane=sec("Calendar",
+        field("Start week on:",weekPick)+
+        field("Open the planner on:",launchPick,"The view you land on each time the planner starts."))+
+      sec("Time",field("",toggle("clock24",p.clock24,"24-hour clock"),
+        p.clock24?"Times read as 14:30.":"Times read as 2:30pm."));
+  }
+  else if(tab==="connections"){
+    const vault=vaultPath();
+    const about="Documents are written into your vault as .md files, and edits made in Obsidian come back.";
+    pane=sec("Obsidian",
+        hasDesktop()
+          ? field("",'<div class="set-actions">'+
+              '<button class="btn btn-sm" data-act="vault-pick">'+icon("i-folder","ic-14")+(vault?"Change vault":"Connect a vault")+'</button>'+
+              (vault?'<button class="btn btn-sm" data-act="vault-open">'+icon("i-pop","ic-14")+'Open</button>'+
+                '<button class="btn btn-sm btn-danger" data-act="vault-forget">Disconnect</button>':"")+'</div>',
+              vault?'Syncing with <b>'+esc(vault)+'/Everyday Orbit</b>.':about)
+          : field("",'<span class="mnone">Vault sync needs the desktop app.</span>',about))+
+      sec("Google Calendar",field("",
         '<button class="btn btn-sm" disabled>'+icon("i-calendar","ic-14")+'Not connected</button>',
-        "Two-way sync is being built — not available yet"))+
+        "Two-way sync is being built. It isn't available yet."));
+  }
+  else{
+    const bk=p.autoBackup||{};
+    const auto=hasDesktop()
+      ? field("",toggle("autoBackup.on",bk.on,"Back up automatically")+
+          (bk.on?'<div class="set-actions">'+
+            '<select class="inp inp-sm" data-act="set-pref" data-k="autoBackup.every">'+
+            [["day","Every day"],["week","Every week"],["month","Every month"]].map(x=>
+              '<option value="'+x[0]+'"'+((bk.every||"week")===x[0]?" selected":"")+'>'+x[1]+'</option>').join("")+'</select>'+
+            '<button class="btn btn-sm" data-act="backup-dir">'+icon("i-folder","ic-14")+(bk.dir?"Change folder":"Choose folder")+'</button>'+
+            '</div>':""),
+          bk.on?(bk.dir?"Into <b>"+esc(bk.dir)+"</b> · "+(bk.last?"last ran "+esc(relTime(bk.last)):"not run yet"):"Choose a folder to keep them in.")
+            :"A copy is saved to a folder of your choosing, on a schedule.")
+      : field("",'<span class="mnone">Automatic backups need the desktop app.</span>');
 
-    group("Your data",
-      row("Backup",'<div class="set-sub">'+
-        '<button class="btn btn-sm" data-act="export">'+icon("i-download","ic-14")+'Back up now</button>'+
-        '<button class="btn btn-sm" data-act="import">'+icon("i-upload","ic-14")+'Restore</button>'+
-        (n===0?'<button class="btn btn-sm" data-act="load-sample">'+icon("i-sparkle","ic-14")+'Load the sample week</button>':"")+
-        '</div>', n+" item"+(n===1?"":"s")+" saved on this device")+
-      row("Automatic backups",backup)+
-      row("Clear everything",
+    pane=sec("Backups",
+        field("",'<div class="set-actions">'+
+          '<button class="btn btn-sm" data-act="export">'+icon("i-download","ic-14")+'Back up now</button>'+
+          '<button class="btn btn-sm" data-act="import">'+icon("i-upload","ic-14")+'Restore</button>'+
+          (n===0?'<button class="btn btn-sm" data-act="load-sample">'+icon("i-sparkle","ic-14")+'Load the sample week</button>':"")+
+          '</div>',n+" item"+(n===1?"":"s")+" saved on this device.")+auto)+
+      sec("Start over",field("",
         '<button class="btn btn-sm btn-danger" data-act="reset-all">'+icon("i-trash","ic-14")+'Clear everything</button>',
-        "Removes every task, routine, note, document and tracked hour"))+
+        "Removes every task, routine, note, document and tracked hour. Your settings stay as they are."));
+  }
 
-    '</div></div><div class="mfoot"><span class="mnone">Everyday Orbit</span>'+
-    '<div class="spacer" style="flex:1"></div><button class="btn btn-primary" data-act="close">Done</button></div></div>');
+  const nav='<nav class="set-nav" role="tablist" aria-label="Settings sections">'+
+    SET_TABS.map(t=>t.group?'<div class="set-nav-h">'+esc(t.group)+'</div>':
+      '<button class="set-tab" role="tab" data-act="set-tab" data-v="'+t.id+'" aria-selected="'+(t.id===tab)+'">'+
+      icon(t.icon)+'<span>'+esc(t.name)+'</span></button>').join("")+
+    '<div class="set-nav-foot">Everyday Orbit</div></nav>';
+  const inner=nav+'<section class="set-pane" role="tabpanel" data-tab="'+tab+'">'+
+    '<button class="icon-btn set-close" data-act="close" aria-label="Close settings">'+icon("i-x")+'</button>'+
+    pane+'</section>';
+
+  /* Every change redraws settings, so an open modal has its insides swapped
+     rather than being opened again -- that would replay the pop-in animation
+     on every toggle, the same flicker the task panel had. */
+  const open=el("modalRoot").querySelector(".modal.settings");
+  if(open){
+    const was=open.querySelector(".set-pane");
+    const keep=was&&was.dataset.tab===tab?was.scrollTop:0;
+    open.innerHTML=inner;
+    open.querySelector(".set-pane").scrollTop=keep;
+  }else{
+    openModal('<div class="modal settings" role="dialog" aria-modal="true" aria-label="Settings">'+inner+'</div>',{focus:false});
+  }
 }
 
 /* ============ backup + restore ============ */
@@ -1351,7 +1388,8 @@ document.addEventListener("click",function(e){
       x.actions=(x.actions||[]).filter(y=>y.id!==id);x.updated=Date.now();save("notes");save("tasks");render();toast("Action item and its task removed");break;}
     case "welcome-sample":startWith(sampleState());toast("Sample week loaded — clear it any time from Settings");break;
     case "welcome-empty":startWith(blankState());toast("Ready — add your first task");break;
-    case "settings":settingsModal();break;
+    case "settings":V.setTab="appearance";settingsModal();break;
+    case "set-tab":V.setTab=n.dataset.v;settingsModal();break;
     case "set-theme":S.prefs.theme=n.dataset.v;save("prefs");applyAppearance();syncTimerWindow();settingsModal();break;
     case "set-accent":S.prefs.accent=n.dataset.v;save("prefs");applyAppearance();syncTimerWindow();settingsModal();break;
     case "backup-dir":pickBackupFolder();break;
