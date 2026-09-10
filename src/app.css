@@ -33,6 +33,11 @@
   --on-accent:#FFFFFF;
   /* What a tint mixes toward: the page, whichever theme it is in. */
   --tint-base:var(--surface);
+  /* What a main section is painted: the calendar, the board, notes, the
+     dashboard. White in light mode. In dark it is the ground, the same
+     near-black as the page behind Routines and Matrix, so the cards and
+     panels on it lift off rather than all sitting at one grey. */
+  --canvas:var(--surface);
   --surface-today:color-mix(in srgb,var(--a-base) 4%,#FDFDFD);
   --line-soft:color-mix(in srgb,var(--a-base) 6%,#F2F3F2);
   --scrim:rgba(24,28,26,.38);
@@ -105,6 +110,7 @@
     /* A struck-through line at .55 vanished on a dark ground. */
     --done-fade:.75;
   --knob:var(--muted);
+  --canvas:var(--ground);
     /* Deeper than light mode: a soft shadow does not register on near-black. */
     --sh-1:0 1px 2px rgba(0,0,0,.42);
     --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
@@ -142,6 +148,7 @@
   /* A struck-through line at .55 vanished on a dark ground. */
   --done-fade:.75;
   --knob:var(--muted);
+  --canvas:var(--ground);
   /* Deeper than light mode: a soft shadow does not register on near-black. */
   --sh-1:0 1px 2px rgba(0,0,0,.42);
   --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
@@ -270,13 +277,13 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 
 /* ---------- calendar ---------- */
 .cal-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;height:100%;min-height:0}
-.cal-main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--surface)}
-.cal-bar{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+.cal-main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--canvas)}
+.cal-bar{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--canvas)}
 .cal-bar h2{font-size:16px}
 .stepper{display:flex;align-items:center;gap:2px}
 .stepper button{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ink-2)}
 .stepper button:hover{background:var(--surface-3)}
-.wk-head{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));border-bottom:1px solid var(--line);background:var(--surface)}
+.wk-head{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));border-bottom:1px solid var(--line);background:var(--canvas)}
 .wk-head .corner{border-right:1px solid var(--line)}
 .dcol{padding:8px 6px 7px;text-align:center;border-right:1px solid var(--line)}
 .dcol:last-child{border-right:0}
@@ -321,7 +328,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .grid-scroll{flex:1;overflow-y:auto;min-height:0}
 /* Pinned inside the scroller, so it shares the grid's content width exactly
    and the day columns cannot drift apart. */
-.wk-sticky{position:sticky;top:0;z-index:6;background:var(--surface)}
+.wk-sticky{position:sticky;top:0;z-index:6;background:var(--canvas)}
 .tgrid{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr));position:relative}
 .tcol-time{border-right:1px solid var(--line)}
 .hourlab{height:48px;text-align:right;padding-right:7px;font-size:10.5px;color:var(--faint);font-weight:600;transform:translateY(-7px)}
@@ -354,9 +361,9 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .nowline::before{content:"";position:absolute;left:-4px;top:-4px;width:7px;height:7px;border-radius:50%;background:var(--danger)}
 
 .mgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);flex:1;min-height:0;background:var(--line)}
-.mhead{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:var(--surface);border-bottom:1px solid var(--line)}
+.mhead{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:var(--canvas);border-bottom:1px solid var(--line)}
 .mhead div{padding:7px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);text-align:center}
-.mcell{background:var(--surface);padding:5px 5px 4px;display:flex;flex-direction:column;gap:3px;min-height:0;overflow:hidden}
+.mcell{background:var(--canvas);padding:5px 5px 4px;display:flex;flex-direction:column;gap:3px;min-height:0;overflow:hidden}
 .mcell.out{background:var(--surface-2)}
 .mcell.out .mnum{color:var(--faint)}
 .mtop{display:flex;align-items:center;gap:5px}
@@ -387,10 +394,10 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 /* ---------- board ---------- */
 /* Tasks sits on white with a bar across the top, the same shape as the
    calendar, so moving between the two does not change the furniture. */
-.task-main{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--surface)}
+.task-main{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--canvas)}
 .board-scroll{flex:1;min-height:0;overflow:auto;padding:16px 18px 18px}
 .list-scroll{flex:1;min-height:0;overflow-y:auto;padding:16px 18px 24px}
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--canvas)}
 .filter-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:20px;border:1px solid var(--line);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--ink-2)}
 .filter-pill:hover{border-color:var(--line-2)}
 .filter-pill.on{background:var(--accent-soft);border-color:transparent;color:var(--accent-2)}
@@ -500,7 +507,7 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .streak{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--apricot);background:var(--apricot-soft);padding:2px 8px;border-radius:20px}
 
 /* ---------- notes ---------- */
-.notes{display:grid;grid-template-columns:266px minmax(0,1fr);height:100%;min-height:0;background:var(--surface)}
+.notes{display:grid;grid-template-columns:266px minmax(0,1fr);height:100%;min-height:0;background:var(--canvas)}
 .nlist{border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--surface-2)}
 .nlist-head{padding:12px;display:flex;flex-direction:column;gap:9px;border-bottom:1px solid var(--line)}
 .nlist-body{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
@@ -631,7 +638,7 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
    height -- today and attention scroll together on the left, the scratch pad
    runs the full height on the right. Narrow: one column, and the scratch pad
    moves up to sit second, where it is still quick to reach. */
-.dash{height:100%;min-height:0;background:var(--surface);padding:20px 24px 24px;
+.dash{height:100%;min-height:0;background:var(--canvas);padding:20px 24px 24px;
   display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,1fr);gap:18px}
 .dash-col{display:flex;flex-direction:column;gap:18px;min-height:0;overflow-y:auto;padding-right:2px}
 .dcard{border:1px solid var(--line);border-radius:var(--r-m);background:var(--surface);min-width:0;flex:none}

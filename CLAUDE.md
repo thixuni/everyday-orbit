@@ -211,6 +211,12 @@ and read as washed out: nothing can lift off a ground that is already halfway
 up the ramp. Text is measured against `--surface`, not `--ground`, because
 that is the panel it actually sits on — ink 12.1, muted 6.3, faint 4.7.
 
+Main sections — the calendar, the board, notes, the dashboard — are painted
+`--canvas`, not `--surface`. In light mode the two are the same white. In dark,
+`--canvas` is the ground, so the cards and panels on it (which stay `--surface`)
+lift off it instead of everything sitting at one grey. Paint a new main area
+with `--canvas`, and anything that should read as a card on it with `--surface`.
+
 Anything tinted is derived with `color-mix()` from `--surface`, never
 written twice, which is why `--tint-base` is a variable. Add a soft colour the
 same way or it will be wrong in one of the two themes. An accent names three
