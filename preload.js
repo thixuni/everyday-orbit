@@ -34,6 +34,15 @@ contextBridge.exposeInMainWorld('orbit', {
   chooseBackupDir: () => ipcRenderer.invoke("backup:dir"),
   writeBackup: job => ipcRenderer.send("backup:write", job),
 
+  /* ---- Google Calendar ----
+     The page never sees a token: it asks, and the main process signs the
+     request. See gcal.js. */
+  gcalConnect:    input => ipcRenderer.invoke('gcal:connect', input),
+  gcalCancel:     ()    => ipcRenderer.invoke('gcal:cancel'),
+  gcalDisconnect: ()    => ipcRenderer.invoke('gcal:disconnect'),
+  gcalStatus:     ()    => ipcRenderer.invoke('gcal:status'),
+  gcalRequest:    req   => ipcRenderer.invoke('gcal:request', req),
+
   /* ---- the floating timer ---- */
   timer:    state => ipcRenderer.send('timer:state', state),
   popTimer: ()    => ipcRenderer.send('timer:pop'),

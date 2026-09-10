@@ -259,6 +259,18 @@ ipcMain.on('doc:delete', (e, doc) => {
   }catch(err){}
 });
 
+/* --------------------------------------------------------- google calendar
+ * Sign-in and tokens live in gcal.js and never cross into the page; the page
+ * gets connect, disconnect, status, and a request call that only reaches the
+ * Calendar API.
+ */
+const gcal = require('./gcal')(readSettings, writeSettings);
+ipcMain.handle('gcal:connect', (e, input) => gcal.connect(input));
+ipcMain.handle('gcal:cancel', () => gcal.cancel());
+ipcMain.handle('gcal:disconnect', () => gcal.disconnect());
+ipcMain.handle('gcal:status', () => gcal.status());
+ipcMain.handle('gcal:request', (e, req) => gcal.request(req));
+
 /* ------------------------------------------------------------ attachments */
 
 ipcMain.on('file:save', (e, req) => {

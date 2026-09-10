@@ -6,6 +6,7 @@ A personal planner desktop app. Electron shell around a single-page web app.
 
 ```
 main.js            Electron main process: windows, menu, vault sync, updates
+gcal.js            Google Calendar sign-in, tokens and requests (main process)
 preload.js         The only bridge to the shell; exposes window.orbit
 src/index.html     Page shell, SVG icon sprite, app markup
 src/timer.html     The floating timer window (desktop only)
@@ -144,6 +145,43 @@ on the line the caret is in when nothing is selected, and they *move* the
 text rather than copy it. The toolbar keeps the selection alive through the
 click the same way the formatting buttons do: they are in the `mousedown`
 guard that calls `saveSel()` and prevents the default.
+
+### Google Calendar
+
+Split across the two processes on purpose. `gcal.js` (main) owns the
+sign-in — system browser, loopback redirect to `127.0.0.1`, PKCE — and the
+refresh token, sealed with `safeStorage`. It never hands a token to the page;
+the page calls `gcalRequest({method, path, query, body})` and the main
+process signs it, refusing any path that is not the Calendar API.
+`test/gcal.test.js` runs the whole sign-in against a fake Google.
+
+What to sync lives in app.js with the data, in the google calendar section:
+
+- **Showing.** `gcalFetchShown()` fetches the ticked calendars for the weeks
+  around the one on screen into `GC.events`. `GC` is memory only — events
+  are Google's data, never saved, cloud-synced or backed up — which is also
+  why there is no tenth entry in `KEYS`. Views read it through `gcalFor(d)`
+  and draw it explicitly; it is **not** folded into `eventsFor()`, because
+  the callers of that assume a routine or a session and a new kind in there
+  broke the month view once before.
+- **Syncing.** `gcalSync()` writes dated tasks and active routines into the
+  *primary* calendar, tagged with `orbitApp/orbitKind/orbitId` in private
+  extended properties. That tag is how it finds its own events, and why it
+  filters them out of what it shows. `prefs.gcal.links[id]` is
+  `{e, h, u}`: event id, hash of what was last written, the event's
+  `updated` stamp when last seen. New hash → the planner changed it → PATCH.
+  New stamp → Google changed it → apply it here. Both → the planner wins.
+  Deleted in Google → `{off:true}`: the item stops syncing and is never put
+  back, and disconnecting keeps those markers.
+- `gcalPrefs()` fills defaults **on the one object**. A sync holds it across
+  many awaits; handing out a fresh copy meanwhile once left it writing "last
+  synced" into an object nothing read. The nested `set-pref` handler
+  mutates in place for the same reason.
+- `GC.applying` is up while the sync saves what it pulled, so those saves do
+  not schedule another sync. A local save of tasks or routines otherwise
+  schedules one four seconds later (`gcalSoon()`).
+- A sync finishing redraws through `softRender()`, which waits if the caret
+  is in a field in the viewport — the scratch pad, most likely.
 
 ### Settings
 

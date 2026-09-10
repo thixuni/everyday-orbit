@@ -53,6 +53,7 @@ src/timer.html   The floating timer window
 src/app.css      Every style. All colours are tokens on :root
 src/app.js       The whole application, in one IIFE
 main.js          Electron shell: windows, menu, vault sync, backups, updates
+gcal.js          Google Calendar sign-in and requests, main process only
 preload.js       The only bridge between the app and the shell
 scripts/         build-standalone.js (the single file), serve.js (dev server)
 test/            Guards for the conventions in CLAUDE.md
@@ -151,6 +152,48 @@ sides cannot loop.
 
 Vault sync is desktop only, for the same reason: a browser tab has no access to
 a folder on your disk.
+
+## Google Calendar
+
+Connect in **Settings ▸ Connections ▸ Google Calendar** (desktop app only).
+Two things then happen:
+
+- **Your Google events show in the planner** — on the calendar, the day
+  popup, and the dashboard's Today and Up next. Tick which calendars to show.
+  Events you declined are left out. They are Google's, so change them there.
+- **Dated tasks and routines go into your main Google calendar.** Tasks as
+  all-day events (a finished one gains a ✓), routines as repeating events.
+  Rename or move one in Google and the planner follows; change it here and
+  Google follows. Delete one in Google and it stops syncing but stays in the
+  planner. Either kind can be switched off in Settings, which removes its
+  events from Google. Tasks due more than two weeks ago are not sent on a
+  first sync.
+
+It syncs on start-up, every five minutes, a few seconds after you change a
+task or routine, and when you press **Sync now**.
+
+### Getting a Client ID
+
+Google only lets an app into a calendar through a Client ID, and for a
+personal app you make your own. It takes about five minutes, once:
+
+1. Open [console.cloud.google.com](https://console.cloud.google.com) and
+   create a project — call it Everyday Orbit.
+2. **APIs & Services ▸ Library**: find **Google Calendar API** and enable it.
+3. **Google Auth Platform**: set up the consent screen. Choose **External**
+   and give it a name and your email.
+4. **Audience**: press **Publish app**. An app left in *Testing* has its
+   sign-in expire every seven days.
+5. **Clients**: create a client of type **Desktop app**, and copy its
+   **Client ID** and **Client secret** into Settings.
+6. Press **Connect**. Your browser opens; sign in and allow access. Google
+   warns that it has not verified the app — it is yours, not a published
+   one — so choose **Advanced**, then go to the app.
+
+The sign-in follows Google's flow for installed apps: the system browser, a
+one-off redirect to `127.0.0.1`, and PKCE. The key it gets back is encrypted
+with your operating system's keychain and never leaves the main process; the
+planner page asks the main process to make each request.
 
 ## Backups
 

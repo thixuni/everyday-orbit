@@ -152,6 +152,7 @@ function bodyFor(k){
 }
 function save(key){
   dirty[key]=true;touched[key]=true;saveLocal();setSync("warn","Saving…");
+  if((key==="tasks"||key==="routines")&&!GC.applying)gcalSoon();
   clearTimeout(timers[key]);
   timers[key]=setTimeout(()=>{
     timers[key]=null;
@@ -251,6 +252,12 @@ function overdueItems(){
 /* ============ view state ============ */
 const V={view:"dashboard",calMode:"week",anchor:today(),taskMode:"board",q:"",odOpen:true,adv:false,sheet:null,range:"week",
   f:{quick:"open",status:"",cat:"",quad:"",from:"",to:"",sort:"due"},noteId:null,noteTag:""};
+
+/* Google Calendar's working state. In memory only: events are Google's data,
+   not the planner's, so they are never saved, synced to the cloud store, or
+   put in a backup. See the google calendar section. */
+const GC={events:[],cals:[],from:"",to:"",busy:false,fetching:false,err:"",status:null,
+  connecting:false,applying:false,soon:null,draft:{id:"",secret:""}};
 
 /* ============ rail + topbar ============ */
 const NAV=[{id:"dashboard",name:"Dashboard",icon:"i-dash"},{id:"calendar",name:"Calendar",icon:"i-calendar"},{id:"tasks",name:"Tasks",icon:"i-board"},
@@ -380,9 +387,12 @@ function weekGrid(){
   const tstr=TODAY();
   let head='<div class="wk-head"><div class="corner"></div>'+days.map(d=>{const s=ymd(d);
     return '<div class="dcol'+(s===tstr?" today":"")+'"><div class="dow">'+DOWS[(d.getDay()+6)%7]+'</div><div class="dnum num">'+d.getDate()+'</div></div>';}).join("")+'</div>';
-  let ad='<div class="allday"><div class="lab">Tasks</div>'+days.map(d=>{const s=ymd(d);
+  let ad='<div class="allday"><div class="lab">'+(gcalOn()?"All day":"Tasks")+'</div>'+days.map(d=>{const s=ymd(d);
     const ts=tasksFor(s);
-    return '<div class="ad-cell'+(s===tstr?" today":"")+'" data-act="new-task" data-date="'+s+'">'+ts.map(t=>{const c=cat(t.cat);
+    const gad=gcalFor(d).allDay.filter(e=>!V.q||e.title.toLowerCase().indexOf(V.q.toLowerCase())>-1);
+    return '<div class="ad-cell'+(s===tstr?" today":"")+'" data-act="new-task" data-date="'+s+'">'+
+      gad.map(e=>'<button class="gchip" style="--c:'+e.color+'" data-act="gcal-ev" data-id="'+esc(e.id)+'" title="'+esc(e.title+" · "+e.calName)+'"><span>'+esc(e.title)+'</span></button>').join("")+
+      ts.map(t=>{const c=cat(t.cat);
       // A task, not an event: a tick box you can complete straight from the
       // calendar, then the title. Two buttons so both stay keyboard reachable.
       const done=t.status==="completed";
@@ -394,13 +404,22 @@ function weekGrid(){
   const cols=days.map(d=>{
     const s=ymd(d);let lines="";for(let h=H0;h<H1;h++)lines+='<div class="hourline"></div>';
     const q=(V.q||"").toLowerCase();
-    const evs=layoutEvents(eventsFor(d).filter(e=>{
+    const evs=layoutEvents(eventsFor(d).concat(gcalFor(d).timed).sort((a,b)=>a.start-b.start).filter(e=>{
       if(!q)return true;
+      if(e.kind==="gcal")return e.g.title.toLowerCase().indexOf(q)>-1||e.g.calName.toLowerCase().indexOf(q)>-1;
       const title=e.kind==="session"?e.t.title:e.r.title;
       const cid=e.kind==="session"?e.t.cat:e.r.cat;
       return title.toLowerCase().indexOf(q)>-1||cat(cid).name.toLowerCase().indexOf(q)>-1;
     }));
     const body=evs.map(e=>{
+      if(e.kind==="gcal"){
+        const top=(e.start/60-H0)*PX,ht=Math.max(18,(e.dur/60)*PX-2),w=100/e._n,left=e._c*w,sm=ht<40;
+        const clip=Math.max(0,-top);   // an event that starts before the grid does
+        return '<button class="ev gev-block'+(sm?" sm":"")+'" style="--c:'+e.g.color+';top:'+Math.max(0,top).toFixed(1)+'px;height:'+
+          Math.max(18,ht-clip).toFixed(1)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" data-act="gcal-ev" data-id="'+esc(e.g.id)+'" '+
+          'title="'+esc(e.g.title+" · "+gcalWhen(e.g)+" · "+e.g.calName)+'"><b>'+esc(e.g.title)+'</b>'+
+          '<i class="num">'+esc(sm?fmtTime(pad(Math.floor(e.start/60))+":"+pad(e.start%60)):gcalWhen(e.g))+'</i></button>';
+      }
       const isS=e.kind==="session";
       const c=cat(isS?e.t.cat:e.r.cat),top=(e.start/60-H0)*PX;
       const ht=isS?Math.max(5,(e.dur/60)*PX-2):Math.max(20,(e.dur/60)*PX-2);
@@ -438,12 +457,14 @@ function monthGrid(){
   for(let i=0;i<42;i++){
     const d=addDays(start,i),s=ymd(d);
     const ts=tasksFor(s);
-    const evs=eventsFor(d);
+    const evs=eventsFor(d),gd=gcalFor(d),gcount=gd.timed.length+gd.allDay.length;
     const dots=[];evs.forEach(e=>{const c=cat(e.kind==="session"?e.t.cat:e.r.cat).color;
       if(dots.indexOf(c)===-1&&dots.length<4)dots.push(c);});
+    gd.allDay.concat(gd.timed.map(x=>x.g)).forEach(e=>{if(dots.indexOf(e.color)===-1&&dots.length<4)dots.push(e.color);});
     const routines=evs.filter(e=>e.kind!=="session"),tracked=evs.filter(e=>e.kind==="session");
     const show=ts.slice(0,2),parts=[];
     if(ts.length-show.length>0)parts.push((ts.length-show.length)+" more");
+    if(gcount)parts.push(gcount+" event"+(gcount===1?"":"s"));
     if(routines.length)parts.push(routines.length+" routine"+(routines.length===1?"":"s"));
     if(tracked.length)parts.push(fmtDur(tracked.reduce((n,e)=>n+(e.s.secs||0),0))+" tracked");
     const more=parts.join(" · ");
@@ -477,7 +498,6 @@ function overduePanel(){
    to put a thought without going to Notes. Nothing here is its own data --
    the scratch pad is the same one Notes opens, and every list is read
    straight from tasks, routines and notes. */
-function gcalTimedToday(){return [];}
 function todayItems(){
   const ts=TODAY();
   /* Open first, finished at the bottom, where they read as progress rather
@@ -540,7 +560,13 @@ function viewDashboard(){
     '<input id="dashQuick" placeholder="Add a task for today, then press Enter" aria-label="Add a task for today" autocomplete="off">'+
     '<select id="dashQuickCat" aria-label="Category for the new task">'+S.categories.map(c=>
       '<option value="'+c.id+'"'+(c.id===qc?" selected":"")+'>'+esc(c.name)+'</option>').join("")+'</select></div>';
+  const gd=gcalFor(today()),gev=gd.allDay.concat(gd.timed.map(x=>x.g));
+  const evRows=gev.map(e=>dashRow({color:e.color,tick:'<span class="dev-mark"></span>',
+    open:'data-act="gcal-ev" data-id="'+esc(e.id)+'"',title:e.title,meta:esc(e.calName),
+    end:esc(e.allDay?"All day":fmtTime(pad(new Date(e.st).getHours())+":"+pad(new Date(e.st).getMinutes()))),
+    behind:!e.allDay&&e.en<Date.now()})).join("");
   const todayCard='<section class="dcard dash-today"><header class="dcard-h"><h2>Today</h2></header>'+quick+
+    (gcalOn()?dashGroup("Events",gev.length,evRows,"No events in your calendar today."):"")+
     dashGroup("Tasks due today",openT,d.tasks.map(taskRow).join(""),"Nothing due today.")+
     dashGroup("Routines",leftR,d.routines.map(routineRow).join(""),"No routines fall on today.")+
     '</section>';
@@ -1165,9 +1191,7 @@ function settingsModal(){
                 '<button class="btn btn-sm btn-danger" data-act="vault-forget">Disconnect</button>':"")+'</div>',
               vault?'Syncing with <b>'+esc(vault)+'/Everyday Orbit</b>.':about)
           : field("",'<span class="mnone">Vault sync needs the desktop app.</span>',about))+
-      sec("Google Calendar",field("",
-        '<button class="btn btn-sm" disabled>'+icon("i-calendar","ic-14")+'Not connected</button>',
-        "Two-way sync is being built. It isn't available yet."));
+      sec("Google Calendar",gcalSettings(toggle));
   }
   else{
     const bk=p.autoBackup||{};
@@ -1215,6 +1239,53 @@ function settingsModal(){
   }else{
     openModal('<div class="modal settings" role="dialog" aria-modal="true" aria-label="Settings">'+inner+'</div>',{focus:false});
   }
+}
+
+/* The Google Calendar part of Settings ▸ Connections. Three states: no
+   desktop app, not connected (the two fields and the steps to fill them),
+   and connected (what syncs, what shows, and the state of the last sync). */
+function gcalSettings(toggle){
+  const field=(label,control,help)=>'<div class="set-field">'+
+    (label?'<div class="set-flabel">'+esc(label)+'</div>':"")+control+(help?'<p class="set-help">'+help+'</p>':"")+'</div>';
+  if(!gcalBridge())return field("",'<span class="mnone">Google Calendar needs the desktop app.</span>',
+    "Your Google events show in the planner, and your dated tasks and routines go into Google.");
+  const st=GC.status||{},g=gcalPrefs(),err=GC.err?'<p class="set-err">'+icon("i-alert","ic-14")+esc(GC.err)+'</p>':"";
+
+  if(!st.connected){
+    const steps='<details class="set-steps"><summary>How to get these — about five minutes, once</summary><ol>'+
+      '<li>Open <b>console.cloud.google.com</b> and create a project. Call it Everyday Orbit.</li>'+
+      '<li>In <b>APIs &amp; Services ▸ Library</b>, find <b>Google Calendar API</b> and enable it.</li>'+
+      '<li>In <b>Google Auth Platform</b>, set up the consent screen: choose <b>External</b>, give it a name and your email.</li>'+
+      '<li>Under <b>Audience</b>, press <b>Publish app</b>. Left in Testing, Google signs you out every seven days.</li>'+
+      '<li>Under <b>Clients</b>, create a client of type <b>Desktop app</b>. Copy its Client ID and Client secret into the boxes above.</li>'+
+      '<li>Press Connect. Your browser opens; sign in and allow access. Google will warn that it has not verified the app, because it is yours and not a published one. Choose <b>Advanced</b>, then go to the app.</li>'+
+      '</ol></details>';
+    return field("Client ID",'<input class="inp inp-wide" id="gcId" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com" value="'+
+        esc(GC.draft.id||st.clientId||"")+'">')+
+      field("Client secret",'<input class="inp inp-wide" id="gcSecret" type="password" autocomplete="off" placeholder="'+
+        (st.hasSecret?"Saved. Leave empty to keep it":"")+'" value="'+esc(GC.draft.secret)+'">')+
+      field("",GC.connecting
+        ? '<div class="set-actions"><span class="set-wait">Waiting for Google. Finish signing in in your browser.</span>'+
+          '<button class="btn btn-sm" data-act="gcal-cancel">Cancel</button></div>'
+        : '<div class="set-actions"><button class="btn btn-sm btn-primary" data-act="gcal-connect">'+icon("i-calendar","ic-14")+'Connect</button></div>',
+        "It needs a Client ID from Google, which you make yourself. The keys it gets back stay on this computer, encrypted.")+
+      err+steps;
+  }
+
+  const when=GC.busy?"Syncing now…":g.last?"Last synced "+relTime(g.last):"Not synced yet";
+  const cals=GC.cals.length?'<div class="gcals">'+GC.cals.map(c=>
+    '<label class="gcal-pick"><input type="checkbox" data-act="gcal-cal" data-id="'+esc(c.id)+'"'+(calShown(c)?" checked":"")+'>'+
+    '<span class="gdot" style="--c:'+c.color+'"></span><span>'+esc(c.name)+'</span></label>').join("")+'</div>'
+    :'<span class="mnone">'+(GC.busy?"Loading your calendars…":"No calendars loaded yet.")+'</span>';
+  return field("",'<div class="set-actions"><span class="set-who">'+icon("i-check","ic-14")+'Connected as <b>'+esc(st.email||"your Google account")+'</b></span></div>'+
+      '<div class="set-actions"><button class="btn btn-sm" data-act="gcal-sync"'+(GC.busy?" disabled":"")+'>'+icon("i-repeat","ic-14")+'Sync now</button>'+
+      '<button class="btn btn-sm btn-danger" data-act="gcal-disconnect">Disconnect</button></div>',
+      esc(when)+". It also syncs by itself every few minutes and whenever you change a task or routine.")+err+
+    field("Put into your main Google calendar",
+      '<div class="set-stack">'+toggle("gcal.pushTasks",g.pushTasks,"Tasks with a due date")+
+      toggle("gcal.pushRoutines",g.pushRoutines,"Routines")+'</div>',
+      "Tasks go in as all-day events, routines as repeating ones. Rename or move one in Google and the planner follows. Delete one there and it stops syncing, but stays here.")+
+    field("Show in the planner",cals,"Events from these calendars appear on your calendar and dashboard.");
 }
 
 /* ============ backup + restore ============ */
@@ -1379,13 +1450,15 @@ function catEditModal(id){
 function peekModal(date){
   const ts=tasksFor(date),evs=eventsFor(parseD(date));
   const routines=evs.filter(e=>e.kind!=="session"),tracked=evs.filter(e=>e.kind==="session");
+  const gd=gcalFor(parseD(date)),gev=gd.allDay.concat(gd.timed.map(x=>x.g));
   openModal('<div class="modal narrow" role="dialog" aria-modal="true" aria-label="Day">'+
     '<div class="mhead2"><h2>'+esc(parseD(date).toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long"}))+'</h2>'+
     '<button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div><div class="mbody">'+
+    (gev.length?'<div><div class="sec-label" style="margin-bottom:6px">Events</div>'+gev.map(e=>'<div class="qrow" data-act="gcal-ev" data-id="'+esc(e.id)+'"><span class="gdot" style="--c:'+e.color+'"></span><div class="t"><b>'+esc(e.title)+'</b></div><span class="chip num">'+esc(e.allDay?"All day":fmtTime(pad(new Date(e.st).getHours())+":"+pad(new Date(e.st).getMinutes())))+'</span></div>').join("")+'</div>':"")+
     (ts.length?'<div><div class="sec-label" style="margin-bottom:6px">Tasks</div>'+ts.map(t=>'<div class="qrow" data-act="task" data-id="'+t.id+'">'+tickBtn(t)+'<div class="t"><b>'+esc(t.title)+'</b></div>'+catChip(t.cat)+'</div>').join("")+'</div>':"")+
     (routines.length?'<div><div class="sec-label" style="margin-bottom:6px">Routines</div>'+routines.map(e=>'<div class="qrow"><button class="tick'+(e.done?" on":"")+'" data-act="routine-done" data-id="'+e.r.id+'" data-date="'+date+'" aria-label="Toggle">'+icon("i-check")+'</button><div class="t"><b>'+esc(e.r.title)+'</b></div><span class="chip num">'+esc(fmtTime(e.r.time))+'</span></div>').join("")+'</div>':"")+
     (tracked.length?'<div><div class="sec-label" style="margin-bottom:6px">Time tracked</div>'+tracked.map(e=>'<div class="qrow">'+icon("i-timer","ic-14")+'<div class="t"><b>'+esc(e.t.title)+'</b></div><span class="chip num">'+esc(fmtDur(e.s.secs))+'</span></div>').join("")+'</div>':"")+
-    (!ts.length&&!evs.length?'<div class="empty">'+icon("i-calendar")+'<p>Nothing scheduled. A clear day.</p></div>':"")+
+    (!ts.length&&!evs.length&&!gev.length?'<div class="empty">'+icon("i-calendar")+'<p>Nothing scheduled. A clear day.</p></div>':"")+
     '</div><div class="mfoot"><button class="btn btn-primary" data-act="new-task" data-date="'+date+'">'+icon("i-plus")+'Add task</button><div class="spacer" style="flex:1"></div><button class="btn" data-act="close">Close</button></div></div>');
 }
 function scratchModal(){
@@ -1407,6 +1480,7 @@ function renderView(){
   else if(V.view==="routines")vp.innerHTML=viewRoutines();
   else vp.innerHTML=viewNotes();
   const gs=el("gridScroll");if(gs)gs.scrollTop=Math.max(0,(7-H0)*PX-8);
+  if(V.view==="calendar"||V.view==="dashboard")gcalEnsure();
 }
 function render(){renderRail();renderTopbar();renderView();}
 
@@ -1621,6 +1695,11 @@ document.addEventListener("click",function(e){
     case "note-open":V.noteId=id;renderView();break;
     case "scratch-task":scratchToTask();break;
     case "scratch-note":scratchToNote();break;
+    case "gcal-ev":gcalEventModal(n.dataset.id);break;
+    case "gcal-connect":gcalConnect();break;
+    case "gcal-cancel":{const o=gcalBridge();if(o&&o.gcalCancel)o.gcalCancel();break;}
+    case "gcal-sync":gcalSync();break;
+    case "gcal-disconnect":if(arm(n,"Disconnect?"))gcalDisconnect();break;
     case "dash-more":V.dashAll=!V.dashAll;renderView();break;
     case "dash-note":V.view="notes";V.noteId=id;V.q="";render();break;
     case "note-tag":V.noteTag=n.dataset.v;renderView();break;
@@ -1695,6 +1774,8 @@ document.addEventListener("input",function(e){
   if(t.id==="q"){V.q=t.value;renderView();return;}
   if(t.id==="rte"){const x=noteById(V.noteId);if(x){x.html=t.innerHTML;x.updated=Date.now();save("notes");}return;}
   if(t.id==="scratchPad"){S.prefs.scratch=t.innerHTML;save("prefs");return;}
+  if(t.id==="gcId"){GC.draft.id=t.value;return;}
+  if(t.id==="gcSecret"){GC.draft.secret=t.value;return;}
   if(t.id==="noteTitle"){const x=noteById(V.noteId);if(x){x.title=t.value;x.updated=Date.now();save("notes");
     const li=document.querySelector(".nitem.on b");if(li)li.textContent=(x.pinned?"📌 ":"")+(t.value||"Untitled note");}return;}
   if(t.id==="aiText"&&e.inputType==="insertLineBreak")addAction(t.closest(".ai-add").querySelector('[data-act="ai-add"]').dataset.nid);
@@ -1757,6 +1838,11 @@ document.addEventListener("change",function(e){
   const t=e.target;
   if(t.id==="importFile"){importPicked(t.files&&t.files[0]);return;}
   if(t.id==="dashQuickCat"){S.prefs.quickCat=t.value;save("prefs");return;}
+  if(t.dataset&&t.dataset.act==="gcal-cal"){
+    gcalPrefs().cals[t.dataset.id]=t.checked;save("prefs");GC.from="";
+    gcalFetchShown(true).catch(e=>{GC.err=e.message;}).then(()=>{softRender();settingsModal();});
+    return;
+  }
   if(t.dataset&&t.dataset.act==="f"){V.f[t.dataset.k]=t.value;renderView();return;}
   if(t.dataset&&t.dataset.act==="set-accent-hex"){
     setCustomAccent(t.value);save("prefs");syncTimerWindow();render();settingsModal();return;
@@ -1764,8 +1850,10 @@ document.addEventListener("change",function(e){
   if(t.dataset&&t.dataset.act==="set-pref"){
     const k=t.dataset.k,v=t.type==="checkbox"?t.checked:t.value;
     if(k.indexOf(".")>-1){const[a,b]=k.split(".");
-      S.prefs[a]=Object.assign({},S.prefs[a]||{});S.prefs[a][b]=v;
+      /* In place, not a copy: a sync in flight holds this object. */
+      S.prefs[a]=S.prefs[a]||{};S.prefs[a][b]=v;
       if(a==="autoBackup"&&b==="on"&&v&&!S.prefs.autoBackup.dir)pickBackupFolder();
+      if(a==="gcal")gcalSoon();
     }else S.prefs[k]=(k==="weekStart")?Number(v):v;
     if(k==="launch")S.prefs.launchSet=true;
     save("prefs");applyAppearance();render();settingsModal();return;
@@ -2191,7 +2279,7 @@ function sheetFiles(t,isNew){
 }
 
 /* ---- activity feed ---- */
-const ACT_ICON={created:"i-plus",comment:"i-chat",doc:"i-doc","doc-edit":"i-doc","doc-del":"i-trash",
+const ACT_ICON={gcal:"i-calendar",created:"i-plus",comment:"i-chat",doc:"i-doc","doc-edit":"i-doc","doc-del":"i-trash",
   field:"i-edit",time:"i-timer",done:"i-check",reopened:"i-repeat"};
 
 function relTime(ms){
@@ -2389,6 +2477,353 @@ function syncTimerWindow(){
     secs:secs,est:est,colour:cat(t.cat).color,over:est>0&&secs>est,dark:dark,accent:accent});}catch(e){}
 }
 
+/* ============ google calendar ============ */
+/* Two jobs, kept apart.
+
+   Showing. Events from the Google calendars you tick are fetched for the
+   weeks around the one on screen and held in GC.events. They are drawn beside
+   the planner's own things and never become tasks.
+
+   Syncing. Dated tasks and active routines are written into your main Google
+   calendar as events whose private extended properties carry orbitApp,
+   orbitKind and orbitId. That is how the planner finds its own events, and
+   why it leaves them out of what it shows: it already draws those itself.
+
+   Each link is remembered in prefs.gcal.links as {e: event id, h: a hash of
+   what was last written, u: the event's "updated" stamp when last seen}.
+   A new hash means the planner changed the item; a new stamp means someone
+   changed the event in Google. If both changed, the planner wins. An event
+   deleted in Google stops that item syncing ({off:true}) rather than being
+   put back, and the item itself is left alone. */
+const TZ=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";}catch(e){return "UTC";}})();
+const BYDAY=["SU","MO","TU","WE","TH","FR","SA"];
+/* Tasks further back than this are history, not plans. A first sync should
+   not pour two years of finished work into someone's calendar. */
+const GCAL_BACK=14;
+
+/* Fills in defaults on the one object rather than replacing it. A sync holds
+   on to this across many awaits; handing out a fresh copy meanwhile left it
+   writing "last synced" into an object nothing read any more. */
+function gcalPrefs(){
+  const g=S.prefs.gcal||(S.prefs.gcal={});
+  if(g.pushTasks===undefined)g.pushTasks=true;
+  if(g.pushRoutines===undefined)g.pushRoutines=true;
+  if(!g.cals)g.cals={};
+  if(!g.links)g.links={};
+  if(!g.last)g.last=0;
+  return g;
+}
+const gcalBridge=()=>{const o=desktop();return o&&o.gcalRequest?o:null;};
+const gcalOn=()=>!!(gcalBridge()&&GC.status&&GC.status.connected);
+function gcalSoon(){
+  try{if(!gcalOn())return;}catch(e){return;}
+  clearTimeout(GC.soon);GC.soon=setTimeout(()=>gcalSync(),4000);
+}
+
+async function gapi(method,path,query,body){
+  const o=gcalBridge();if(!o)return {ok:false,error:"desktop"};
+  const r=await o.gcalRequest({method:method,path:path,query:query||null,body:body||null});
+  if(!r.ok&&r.error==="reconnect"){GC.status=Object.assign({},GC.status,{connected:false});
+    GC.err="Google Calendar needs connecting again.";}
+  return r;
+}
+async function gList(path,query){
+  let items=[],page="";
+  for(let i=0;i<25;i++){
+    const r=await gapi("GET",path,Object.assign({},query,page?{pageToken:page}:{}));
+    if(!r.ok)throw new Error(r.error==="offline"?"You look to be offline.":r.error||"Google Calendar did not answer.");
+    items=items.concat((r.data&&r.data.items)||[]);
+    page=r.data&&r.data.nextPageToken;if(!page)break;
+  }
+  return items;
+}
+const ep=ev=>(ev&&ev.extendedProperties&&ev.extendedProperties.private)||{};
+const gHash=ev=>JSON.stringify([ev.summary,ev.start,ev.end,ev.recurrence||null]);
+const evPath=id=>"/calendars/primary/events/"+encodeURIComponent(id);
+
+/* ---- what the planner writes ---- */
+function taskEvent(t){
+  const from=tStart(t)&&tStart(t)<t.due?tStart(t):t.due;
+  return {summary:(t.status==="completed"?"✓ ":"")+t.title,
+    start:{date:from},end:{date:ymd(addDays(parseD(t.due),1))},
+    /* A task is a deadline, not a meeting: it should not show you as busy. */
+    transparency:"transparent",
+    extendedProperties:{private:{orbitApp:"1",orbitKind:"task",orbitId:t.id}}};
+}
+/* A repeating event's first instance has to be a day it actually falls on. */
+function routineFirst(r){
+  let d=parseD(r.start||TODAY());
+  if(r.freq==="interval")return d;
+  for(let i=0;i<7;i++){if((r.days||[]).indexOf(d.getDay())>-1)return d;d=addDays(d,1);}
+  return d;
+}
+function routineRule(r,timed){
+  let rule;
+  if(r.freq==="interval")rule="RRULE:FREQ=DAILY;INTERVAL="+Math.max(1,r.every||2);
+  else{const days=(r.days||[]).slice().sort();
+    rule=days.length===7?"RRULE:FREQ=DAILY":"RRULE:FREQ=WEEKLY;BYDAY="+days.map(x=>BYDAY[x]).join(",");}
+  if(r.end)rule+=";UNTIL="+r.end.replace(/-/g,"")+(timed?"T235959Z":"");
+  return rule;
+}
+function routineEvent(r){
+  const first=ymd(routineFirst(r)),timed=!!r.time;
+  const ev={summary:r.title,recurrence:[routineRule(r,timed)],
+    extendedProperties:{private:{orbitApp:"1",orbitKind:"routine",orbitId:r.id}}};
+  if(timed){
+    const x=r.time.split(":").map(Number),end=x[0]*60+x[1]+(Number(r.dur)||30);
+    const endDay=ymd(addDays(parseD(first),Math.floor(end/1440))),em=end%1440;
+    ev.start={dateTime:first+"T"+r.time+":00",timeZone:TZ};
+    ev.end={dateTime:endDay+"T"+pad(Math.floor(em/60))+":"+pad(em%60)+":00",timeZone:TZ};
+  }else{ev.start={date:first};ev.end={date:ymd(addDays(parseD(first),1))};}
+  return ev;
+}
+
+/* ---- what comes back ---- */
+function applyTaskEvent(t,ev){
+  const title=String(ev.summary||"").replace(/^✓\s*/,"").trim();
+  const sd=ev.start&&(ev.start.date||String(ev.start.dateTime||"").slice(0,10));
+  if(!sd)return;
+  let ed=ev.end&&ev.end.date?ymd(addDays(parseD(ev.end.date),-1)):String((ev.end&&ev.end.dateTime)||"").slice(0,10);
+  if(!ed||ed<sd)ed=sd;
+  const before=JSON.parse(JSON.stringify(t));
+  if(title)t.title=title;
+  t.due=ed;t.start=sd<ed?sd:"";
+  if(JSON.stringify(before)!==JSON.stringify(t)){
+    logAct(t.id,"gcal","Changed in Google Calendar");
+    logChanges(t.id,before,t);
+  }
+}
+function applyRoutineEvent(r,ev){
+  const title=String(ev.summary||"").trim();
+  if(title)r.title=title;
+  if(ev.start&&ev.start.dateTime&&ev.end&&ev.end.dateTime){
+    const st=new Date(ev.start.dateTime),en=new Date(ev.end.dateTime);
+    r.time=pad(st.getHours())+":"+pad(st.getMinutes());
+    r.dur=Math.max(5,Math.round((en-st)/60000));
+  }
+  /* Which days it repeats on can be changed there too. */
+  const rule=((ev.recurrence||[]).filter(x=>/^RRULE:/.test(x))[0]||"").slice(6);
+  if(rule){
+    const kv={};rule.split(";").forEach(p=>{const q=p.split("=");kv[q[0]]=q[1];});
+    if(kv.FREQ==="DAILY"&&Number(kv.INTERVAL)>1){r.freq="interval";r.every=Number(kv.INTERVAL);r.days=[];}
+    else if(kv.FREQ==="DAILY"){r.freq="weekly";r.days=[0,1,2,3,4,5,6];}
+    else if(kv.FREQ==="WEEKLY"&&kv.BYDAY){
+      const days=kv.BYDAY.split(",").map(x=>BYDAY.indexOf(x.replace(/^[-+\d]+/,""))).filter(x=>x>-1);
+      if(days.length){r.freq="weekly";r.days=days.sort();}
+    }
+    if(kv.UNTIL)r.end=kv.UNTIL.slice(0,4)+"-"+kv.UNTIL.slice(4,6)+"-"+kv.UNTIL.slice(6,8);
+  }
+}
+
+/* ---- the sync ---- */
+async function gcalSync(){
+  if(!gcalOn()||GC.busy)return;
+  GC.busy=true;GC.err="";paintGcal();
+  const g=gcalPrefs(),links=g.links;
+  let touchedTasks=false,touchedRoutines=false;
+  try{
+    const mine=await gList("/calendars/primary/events",
+      {privateExtendedProperty:"orbitApp=1",showDeleted:"true",maxResults:"2500"});
+    const byEvent={},byItem={};
+    mine.forEach(ev=>{byEvent[ev.id]=ev;const id=ep(ev).orbitId;if(id&&ev.status!=="cancelled")byItem[id]=ev;});
+
+    const floor=ymd(addDays(today(),-GCAL_BACK)),want={};
+    if(g.pushTasks)S.tasks.forEach(t=>{
+      if(t.due&&t.status!=="dropped"&&(t.due>=floor||links[t.id]))want[t.id]={kind:"task",item:t,ev:taskEvent(t)};});
+    if(g.pushRoutines)S.routines.forEach(r=>{
+      if(r.active&&(r.freq==="interval"||(r.days||[]).length))want[r.id]={kind:"routine",item:r,ev:routineEvent(r)};});
+
+    /* Linked, but no longer wanted: deleted here, undated, dropped, paused,
+       or its kind switched off in Settings. The event goes. */
+    for(const id of Object.keys(links)){
+      if(want[id])continue;
+      const L=links[id],ev=L.e&&byEvent[L.e];
+      if(ev&&ev.status!=="cancelled"&&!L.off){
+        const r=await gapi("DELETE",evPath(L.e));
+        if(!r.ok&&r.status!==404&&r.status!==410)throw new Error(r.error);
+      }
+      delete links[id];
+    }
+
+    for(const id of Object.keys(want)){
+      const w=want[id],L=links[id],h=gHash(w.ev);
+      if(L&&L.off)continue;
+      const ev=L&&L.e?byEvent[L.e]:byItem[id];
+      if(L&&L.e&&(!ev||ev.status==="cancelled")){
+        links[id]={off:true};
+        if(w.kind==="task")logAct(id,"gcal","Deleted in Google Calendar, so it no longer syncs there");
+        continue;
+      }
+      if(!ev){
+        const r=await gapi("POST","/calendars/primary/events",null,w.ev);
+        if(!r.ok)throw new Error(r.error);
+        links[id]={e:r.data.id,h:h,u:r.data.updated};
+        continue;
+      }
+      const mineChanged=!L||L.h!==h,theirsChanged=!!L&&ev.updated!==L.u;
+      if(mineChanged){
+        const r=await gapi("PATCH",evPath(ev.id),null,w.ev);
+        if(!r.ok)throw new Error(r.error);
+        links[id]={e:ev.id,h:h,u:r.data.updated};
+      }else if(theirsChanged){
+        GC.applying=true;
+        try{if(w.kind==="task"){applyTaskEvent(w.item,ev);touchedTasks=true;}
+            else{applyRoutineEvent(w.item,ev);touchedRoutines=true;}}
+        finally{GC.applying=false;}
+        const now=w.kind==="task"?taskEvent(w.item):routineEvent(w.item);
+        links[id]={e:ev.id,h:gHash(now),u:ev.updated};
+      }
+    }
+    await gcalFetchShown(true);
+    g.last=Date.now();
+  }catch(e){
+    GC.err=e&&e.message?e.message:"Sync failed.";
+  }finally{
+    GC.applying=true;
+    try{if(touchedTasks)save("tasks");if(touchedRoutines)save("routines");save("prefs");}
+    finally{GC.applying=false;GC.busy=false;}
+    softRender();paintGcal();
+  }
+}
+
+/* ---- what is shown ---- */
+function gcalWindow(){
+  const base=startOfWeek(new Date(V.anchor.getFullYear(),V.anchor.getMonth(),1));
+  const a=addDays(base,-7),b=addDays(base,49),ta=addDays(today(),-7),tb=addDays(today(),14);
+  return {from:ymd(a<ta?a:ta),to:ymd(b>tb?b:tb)};
+}
+const calShown=c=>{const m=gcalPrefs().cals;return m[c.id]!==undefined?!!m[c.id]:!!c.primary;};
+async function gcalFetchShown(force){
+  if(!gcalOn())return;
+  const w=gcalWindow();
+  if(!force&&GC.from&&w.from>=GC.from&&w.to<=GC.to)return;
+  const list=await gList("/users/me/calendarList",{minAccessRole:"reader"});
+  GC.cals=list.map(c=>({id:c.id,name:c.summaryOverride||c.summary||c.id,color:c.backgroundColor||"#6B8BD9",primary:!!c.primary}))
+    .sort((a,b)=>(b.primary?1:0)-(a.primary?1:0)||a.name.localeCompare(b.name));
+  const timeMin=parseD(w.from).toISOString(),timeMax=parseD(w.to).toISOString(),out=[];
+  for(const c of GC.cals.filter(calShown)){
+    const items=await gList("/calendars/"+encodeURIComponent(c.id)+"/events",
+      {singleEvents:"true",orderBy:"startTime",maxResults:"2500",timeMin:timeMin,timeMax:timeMax});
+    items.forEach(ev=>{
+      if(ev.status==="cancelled"||ep(ev).orbitApp)return;
+      /* An invitation you turned down is not in your day. */
+      if((ev.attendees||[]).some(a=>a.self&&a.responseStatus==="declined"))return;
+      const all=!!(ev.start&&ev.start.date);
+      out.push({id:ev.id,cal:c.id,calName:c.name,color:c.color,title:ev.summary||"(No title)",allDay:all,
+        sd:all?ev.start.date:"",ed:all?ev.end.date:"",
+        st:all?0:Date.parse(ev.start.dateTime),en:all?0:Date.parse(ev.end.dateTime),
+        where:ev.location||"",link:ev.htmlLink||"",meet:ev.hangoutLink||""});
+    });
+  }
+  GC.events=out;GC.from=w.from;GC.to=w.to;
+}
+/* Called on every calendar or dashboard draw; fetches only when the weeks on
+   screen fall outside what is already held. */
+function gcalEnsure(){
+  if(!gcalOn()||GC.busy||GC.fetching)return;
+  const w=gcalWindow();
+  if(GC.from&&w.from>=GC.from&&w.to<=GC.to)return;
+  GC.fetching=true;
+  gcalFetchShown(false).catch(e=>{GC.err=e.message||"Could not load events.";})
+    .then(()=>{GC.fetching=false;softRender();});
+}
+/* A day's events, split the way the views draw them. Timed ones are clipped
+   to the day, so an event across midnight shows on both sides of it. */
+function gcalFor(d){
+  const s=ymd(d),d0=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(),d1=addDays(d,1).setHours(0,0,0,0);
+  const timed=[],allDay=[];
+  GC.events.forEach(e=>{
+    if(e.allDay){if(e.sd<=s&&s<e.ed)allDay.push(e);return;}
+    if(e.en<=d0||e.st>=d1)return;
+    const a=Math.max(e.st,d0),b=Math.min(e.en,d1);
+    timed.push({kind:"gcal",g:e,date:s,start:Math.round((a-d0)/60000),dur:Math.max(15,Math.round((b-a)/60000))});
+  });
+  return {timed:timed,allDay:allDay};
+}
+function gcalTimedToday(){
+  return gcalFor(today()).timed.map(x=>({title:x.g.title,color:x.g.color,start:x.start,end:x.start+x.dur,
+    act:'data-act="gcal-ev" data-id="'+esc(x.g.id)+'"'}));
+}
+function gcalWhen(e){
+  if(e.allDay){
+    const last=ymd(addDays(parseD(e.ed),-1));
+    return e.sd===last?"All day":"All day, "+fmtDate(e.sd)+" – "+fmtDate(last);
+  }
+  const a=new Date(e.st),b=new Date(e.en),hm=x=>fmtTime(pad(x.getHours())+":"+pad(x.getMinutes()));
+  return (ymd(a)!==TODAY()?fmtDate(ymd(a))+", ":"")+hm(a)+" – "+hm(b);
+}
+function gcalEventModal(id){
+  const e=GC.events.filter(x=>x.id===id)[0];if(!e)return;
+  openModal('<div class="modal narrow" role="dialog" aria-modal="true" aria-label="Event">'+
+    '<div class="mhead2"><span class="gdot" style="--c:'+e.color+'"></span><h2>'+esc(e.title)+'</h2>'+
+    '<button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div>'+
+    '<div class="mbody gev">'+
+      '<p>'+icon("i-clock","ic-14")+esc(gcalWhen(e))+'</p>'+
+      '<p>'+icon("i-calendar","ic-14")+esc(e.calName)+'</p>'+
+      (e.where?'<p>'+icon("i-flag","ic-14")+esc(e.where)+'</p>':"")+
+      (e.meet?'<p>'+icon("i-link","ic-14")+'<a href="'+esc(e.meet)+'" target="_blank" rel="noopener">Join the video call</a></p>':"")+
+      '<p class="gev-note">From Google Calendar. Change it there.</p>'+
+    '</div><div class="mfoot">'+
+      (e.link?'<a class="btn" href="'+esc(e.link)+'" target="_blank" rel="noopener">'+icon("i-pop","ic-14")+'Open in Google Calendar</a>':"")+
+      '<div class="spacer" style="flex:1"></div><button class="btn btn-primary" data-act="close">Done</button></div></div>');
+}
+
+/* ---- redraws that respect the caret ----
+   A sync finishing while you type in the scratch pad or a search box would
+   throw the caret away, so the redraw waits until you leave the field. */
+function typingInView(){
+  const a=document.activeElement,vp=el("viewport");
+  return !!(a&&vp&&vp.contains(a)&&(a.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)));
+}
+function softRender(){
+  if(typingInView()){V.renderLater=true;return;}
+  V.renderLater=false;render();
+}
+document.addEventListener("focusout",function(){
+  if(!V.renderLater)return;
+  setTimeout(function(){if(V.renderLater&&!typingInView()){V.renderLater=false;render();}},0);
+});
+/* Settings shows the sync state; keep it current if it is open on that tab. */
+function paintGcal(){
+  if(el("modalRoot").querySelector('.modal.settings .set-pane[data-tab="connections"]'))settingsModal();
+}
+
+async function gcalConnect(){
+  const o=gcalBridge();if(!o||GC.connecting)return;
+  GC.connecting=true;GC.err="";settingsModal();
+  let r;
+  try{r=await o.gcalConnect({clientId:GC.draft.id,clientSecret:GC.draft.secret});}
+  catch(e){r={ok:false,error:"Could not start the sign-in."};}
+  GC.connecting=false;
+  if(r&&r.ok){
+    GC.draft={id:"",secret:""};
+    try{GC.status=await o.gcalStatus();}catch(e){}
+    toast("Connected to Google Calendar");
+    settingsModal();gcalSync();
+  }else{
+    if(r&&r.error!=="Cancelled.")GC.err=r&&r.error||"Could not connect.";
+    settingsModal();
+  }
+}
+async function gcalDisconnect(){
+  const o=gcalBridge();if(!o)return;
+  try{await o.gcalDisconnect();GC.status=await o.gcalStatus();}catch(e){}
+  /* The events stay in Google; only the links go. Connect again and the
+     planner finds its own events by the orbitId they carry, so nothing is
+     written twice. The links kept are the ones you stopped by deleting the
+     event in Google: that was a choice about the item, and reconnecting
+     should not undo it. */
+  const g=gcalPrefs();Object.keys(g.links).forEach(id=>{if(!g.links[id].off)delete g.links[id];});save("prefs");
+  GC.events=[];GC.cals=[];GC.from=GC.to="";GC.err="";
+  settingsModal();softRender();toast("Google Calendar disconnected");
+}
+async function gcalBoot(){
+  const o=gcalBridge();if(!o||!o.gcalStatus)return;
+  try{GC.status=await o.gcalStatus();}catch(e){return;}
+  if(GC.status&&GC.status.connected){gcalSync();}
+  setInterval(()=>{if(gcalOn())gcalSync();},5*60*1000);
+}
+
 /* ============ time analytics ============ */
 
 /* A bar row, used for both the category and the task breakdown. */
@@ -2446,6 +2881,7 @@ try{matchMedia("(prefers-color-scheme:dark)").addEventListener("change",syncTime
 if(S.prefs&&!S.prefs.launchSet&&S.prefs.launch==="calendar"){S.prefs.launch="dashboard";save("prefs");}
 if(S.prefs&&S.prefs.launch&&NAV.some(v=>v.id===S.prefs.launch)){V.view=S.prefs.launch;render();}
 maybeAutoBackup();
+gcalBoot();
 setInterval(()=>{if(V.view==="calendar"&&V.calMode==="week"&&!el("modalRoot").innerHTML)renderView();},60000);
 setInterval(()=>{const n=el("dashNext");if(n&&V.view==="dashboard")n.innerHTML=upNextHtml();},30000);
 

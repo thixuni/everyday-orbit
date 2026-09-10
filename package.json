@@ -43,6 +43,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "gcal.js",
       "src/**/*",
       "build/icon.ico",
       "build/icon.png"

@@ -38,7 +38,7 @@ test('the scripts parse as JavaScript', () => {
   // Every other check reads the sources as text, so a stray bracket would
   // pass all of them while the app itself could not start.
   const vm = require('vm');
-  for (const f of ['src/app.js', 'main.js', 'preload.js']) {
+  for (const f of ['src/app.js', 'main.js', 'preload.js', 'gcal.js']) {
     assert.doesNotThrow(() => new vm.Script(read(f), { filename: f }), f + ' has a syntax error');
   }
   const inline = (read('src/timer.html').match(/<script>([\s\S]*?)<\/script>/) || [])[1];
@@ -158,7 +158,9 @@ test('everything reaching the shell goes through the preload bridge', () => {
     openVault: 'vault:open', useVault: 'vault:use',
     writeDoc: 'doc:write', deleteDoc: 'doc:delete', onVaultChange: 'vault:changed',
     chooseBackupDir: 'backup:dir', writeBackup: 'backup:write',
-    timer: 'timer:state', popTimer: 'timer:pop', onTimerCmd: 'timer:cmd'
+    timer: 'timer:state', popTimer: 'timer:pop', onTimerCmd: 'timer:cmd',
+    gcalConnect: 'gcal:connect', gcalCancel: 'gcal:cancel', gcalDisconnect: 'gcal:disconnect',
+    gcalStatus: 'gcal:status', gcalRequest: 'gcal:request'
   };
   for (const [member, channel] of Object.entries(surface)) {
     assert.ok(new RegExp('\\b' + member + '\\s*[:(]').test(preload), 'preload.js no longer exposes ' + member);

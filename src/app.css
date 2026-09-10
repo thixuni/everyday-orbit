@@ -731,6 +731,44 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
   .dplay{opacity:1}
 }
 
+/* ---------- google calendar ----------
+   Google's events wear their calendar's colour, passed in as --c exactly as
+   a category colour is, so they tint the same way in both themes. They are
+   outlined rather than edged down one side: that edge is the mark of the
+   planner's own routines, and the two should be told apart at a glance. */
+.gev-block{border-left:0;box-shadow:inset 0 0 0 1px var(--edge)}
+.gev-block:hover{background:var(--fill-hover)}
+.gchip{--fill:color-mix(in srgb,var(--c) 16%,var(--tint-base));
+  --label:color-mix(in srgb,var(--c) 58%,var(--ink));
+  display:flex;align-items:center;min-width:0;width:100%;padding:2px 7px;border-radius:7px;
+  background:var(--fill);color:var(--label);font-size:11.5px;font-weight:600;text-align:left}
+.gchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gchip:hover{background:color-mix(in srgb,var(--c) 24%,var(--tint-base))}
+.gdot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.dev-mark{width:17px;height:17px;flex:none;display:grid;place-items:center}
+.dev-mark::before{content:"";width:4px;height:17px;border-radius:3px;background:var(--c)}
+.gev{gap:10px}
+.gev p{display:flex;align-items:center;gap:9px;margin:0;font-size:13.5px;color:var(--ink)}
+.gev p .ic{color:var(--muted)}
+.gev a{color:var(--accent-2);font-weight:600}
+.gev .gev-note{font-size:12px;color:var(--faint);margin-top:6px}
+
+.set-field .inp-wide{width:100%;max-width:440px}
+.set-err{display:flex;align-items:flex-start;gap:7px;margin:14px 0 0;font-size:12.5px;color:var(--danger);max-width:54ch}
+.set-err .ic{flex:none;margin-top:2px}
+.set-wait{font-size:12.5px;color:var(--muted)}
+.set-who{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink)}
+.set-who .ic{color:var(--accent)}
+.set-who b{font-weight:600}
+.set-stack{display:flex;flex-direction:column;gap:10px}
+.set-steps{margin-top:16px;font-size:12.5px;color:var(--muted);max-width:60ch}
+.set-steps summary{cursor:pointer;font-weight:600;color:var(--accent-2)}
+.set-steps ol{margin:10px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px;line-height:1.55}
+.set-steps b{color:var(--ink-2);font-weight:600}
+.gcals{display:flex;flex-direction:column;gap:7px}
+.gcal-pick{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ink);cursor:pointer}
+.gcal-pick input{accent-color:var(--accent);width:15px;height:15px;margin:0}
+
 /* ---------- settings ----------
    A sidebar of sections and one pane open at a time, the way Notion Calendar
    lays its settings out. The modal has a fixed height so that switching tabs
