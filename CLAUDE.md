@@ -124,6 +124,10 @@ hue. Both live as attributes on the root element — `data-theme` and
 sets no attribute at all, which is the only way the media query can keep
 tracking the OS.
 
+The neutrals are not fixed greys either: each is a pure grey with a trace of
+the accent mixed in, so the greys shift with the hue. Fixed green-grey
+neutrals looked wrong the moment the accent was not green.
+
 Anything tinted is derived with `color-mix()` from `--surface`, never
 written twice, which is why `--tint-base` is a variable. Add a soft colour the
 same way or it will be wrong in one of the two themes. An accent names three

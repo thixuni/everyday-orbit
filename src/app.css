@@ -1,23 +1,30 @@
 /* ---------------------------------------------------------------- tokens
  * Two things vary: the neutral ramp (light or dark) and the accent hue.
  *
- * Everything tinted is derived with color-mix() from --surface rather than
+ * The neutrals are not fixed greys. Each is a pure grey with a trace of the
+ * accent mixed in, so the whole page shifts with the hue you pick — pick
+ * violet and the greys go faintly violet. Fixed green-grey neutrals looked
+ * wrong the moment the accent was not green.
+ *
+ * Everything tinted derives with color-mix() from --surface rather than being
  * written twice, so a soft background, a category chip and an event block all
- * follow the theme without a second set of values to keep in step. That is
- * why --tint-base is a variable and not #FFFFFF.
+ * follow the theme with no second set of values. That is why --tint-base is a
+ * variable and not #FFFFFF.
  */
 :root{
   color-scheme: light;
-  --ground:#F3F5F1;
+  /* A trace of accent in every neutral; heavier on the lines, which is where
+     the tint is legible without muddying text. */
+  --ground:color-mix(in srgb,var(--a-base) 6%,#F5F6F5);
   --surface:#FFFFFF;
-  --surface-2:#FAFBF8;
-  --surface-3:#EFF2EC;
-  --line:#E5E9E1;
-  --line-2:#D5DCCE;
-  --ink:#222A24;
-  --ink-2:#495247;
-  --muted:#7D867C;
-  --faint:#9AA298;
+  --surface-2:color-mix(in srgb,var(--a-base) 3%,#FBFBFB);
+  --surface-3:color-mix(in srgb,var(--a-base) 7%,#F0F1F0);
+  --line:color-mix(in srgb,var(--a-base) 9%,#E7E8E7);
+  --line-2:color-mix(in srgb,var(--a-base) 14%,#D8DAD9);
+  --ink:color-mix(in srgb,var(--a-base) 6%,#232725);
+  --ink-2:color-mix(in srgb,var(--a-base) 7%,#4B504D);
+  --muted:color-mix(in srgb,var(--a-base) 8%,#6E736F);
+  --faint:color-mix(in srgb,var(--a-base) 9%,#868B87);
   --apricot:#E0854A;
   --danger:#C25340;
   --amber:#BC841A;
@@ -26,9 +33,11 @@
   --on-accent:#FFFFFF;
   /* What a tint mixes toward: the page, whichever theme it is in. */
   --tint-base:var(--surface);
-  --surface-today:#FCFDFB;
-  --line-soft:#F1F4EE;
-  --scrim:rgba(30,38,32,.38);
+  --surface-today:color-mix(in srgb,var(--a-base) 4%,#FDFDFD);
+  --line-soft:color-mix(in srgb,var(--a-base) 6%,#F2F3F2);
+  --scrim:rgba(24,28,26,.38);
+  /* How far a finished thing fades. Dark needs far less, or it disappears. */
+  --done-fade:.55;
 
   /* Derived once, so nothing below needs a light and a dark spelling. */
   --accent-soft:color-mix(in srgb,var(--accent) 13%,var(--surface));
@@ -38,9 +47,9 @@
   --blue-soft:color-mix(in srgb,var(--blue) 14%,var(--surface));
 
   --r-s:9px; --r-m:13px; --r-l:20px;
-  --sh-1:0 1px 2px rgba(34,42,36,.06);
-  --sh-2:0 8px 24px -12px rgba(34,42,36,.22);
-  --sh-3:0 24px 60px -20px rgba(34,42,36,.30);
+  --sh-1:0 1px 2px rgba(24,28,26,.06);
+  --sh-2:0 8px 24px -12px rgba(24,28,26,.22);
+  --sh-3:0 24px 60px -20px rgba(24,28,26,.30);
   --ff:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --fd:"Gabarito","Plus Jakarta Sans",system-ui,sans-serif;
 }
@@ -64,58 +73,72 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     color-scheme: dark;
-    --ground:#141815;
-    --surface:#1C221E;
-    --surface-2:#222925;
-    --surface-3:#2A322C;
-    --line:#313A34;
-    --line-2:#404A44;
-    --ink:#E9EEEA;
-    --ink-2:#C3CDC7;
-    --muted:#8E9A93;
-    --faint:#6C7973;
-    --apricot:#E8975F;
-    --danger:#DE6E5A;
-    --amber:#D6A33A;
-    --blue:#6699D6;
-    --surface-today:#212823;
-    --line-soft:#283029;
-    --scrim:rgba(6,9,7,.58);
-    --sh-1:0 1px 2px rgba(0,0,0,.34);
-    --sh-2:0 8px 24px -12px rgba(0,0,0,.6);
-    --sh-3:0 24px 60px -20px rgba(0,0,0,.72);
-  /* The lifted shade carries the accent here, so what sits on it goes dark. */
+    /* Charcoal, not black. The earlier ramp bottomed out near #14 and the
+       contrast against light text was harsh to sit in front of; these lift the
+       floor and shrink the gap between the ground and the panels on it. */
+    --ground:color-mix(in srgb,var(--a-lift) 5%,#1A1D1F);
+    --surface:color-mix(in srgb,var(--a-lift) 5%,#23272A);
+    --surface-2:color-mix(in srgb,var(--a-lift) 6%,#282D30);
+    --surface-3:color-mix(in srgb,var(--a-lift) 8%,#31373A);
+    --line:color-mix(in srgb,var(--a-lift) 9%,#3A4145);
+    --line-2:color-mix(in srgb,var(--a-lift) 12%,#4A5257);
+    /* Secondary text was the unreadable part: these clear 4.5:1 on --surface,
+       where the old --muted and --faint did not. */
+    --ink:color-mix(in srgb,var(--a-lift) 6%,#EDF0F1);
+    --ink-2:color-mix(in srgb,var(--a-lift) 7%,#CFD5D7);
+    --muted:color-mix(in srgb,var(--a-lift) 9%,#A7AFB2);
+    --faint:color-mix(in srgb,var(--a-lift) 10%,#8B9497);
+    --apricot:#EDA470;
+    --danger:#E58270;
+    --amber:#DDAE52;
+    --blue:#7BA8DD;
+    --surface-today:color-mix(in srgb,var(--a-lift) 7%,#272C2F);
+    --line-soft:color-mix(in srgb,var(--a-lift) 7%,#31363A);
+    --scrim:rgba(8,10,11,.62);
+    /* A struck-through line at .55 vanished on a dark ground. */
+    --done-fade:.75;
+    --sh-1:0 1px 2px rgba(0,0,0,.3);
+    --sh-2:0 8px 24px -12px rgba(0,0,0,.55);
+    --sh-3:0 24px 60px -20px rgba(0,0,0,.66);
+    /* The lifted shade carries the accent here, so what sits on it goes dark. */
     --accent:var(--a-lift);
     --accent-2:var(--a-base);
-    --on-accent:#111611;
+    --on-accent:#14171A;
   }
 }
 :root[data-theme="dark"]{
   color-scheme: dark;
-  --ground:#141815;
-  --surface:#1C221E;
-  --surface-2:#222925;
-  --surface-3:#2A322C;
-  --line:#313A34;
-  --line-2:#404A44;
-  --ink:#E9EEEA;
-  --ink-2:#C3CDC7;
-  --muted:#8E9A93;
-  --faint:#6C7973;
-  --apricot:#E8975F;
-  --danger:#DE6E5A;
-  --amber:#D6A33A;
-  --blue:#6699D6;
-  --surface-today:#212823;
-  --line-soft:#283029;
-  --scrim:rgba(6,9,7,.58);
-  --sh-1:0 1px 2px rgba(0,0,0,.34);
-  --sh-2:0 8px 24px -12px rgba(0,0,0,.6);
-  --sh-3:0 24px 60px -20px rgba(0,0,0,.72);
-/* The lifted shade carries the accent here, so what sits on it goes dark. */
+  /* Charcoal, not black. The earlier ramp bottomed out near #14 and the
+     contrast against light text was harsh to sit in front of; these lift the
+     floor and shrink the gap between the ground and the panels on it. */
+  --ground:color-mix(in srgb,var(--a-lift) 5%,#1A1D1F);
+  --surface:color-mix(in srgb,var(--a-lift) 5%,#23272A);
+  --surface-2:color-mix(in srgb,var(--a-lift) 6%,#282D30);
+  --surface-3:color-mix(in srgb,var(--a-lift) 8%,#31373A);
+  --line:color-mix(in srgb,var(--a-lift) 9%,#3A4145);
+  --line-2:color-mix(in srgb,var(--a-lift) 12%,#4A5257);
+  /* Secondary text was the unreadable part: these clear 4.5:1 on --surface,
+     where the old --muted and --faint did not. */
+  --ink:color-mix(in srgb,var(--a-lift) 6%,#EDF0F1);
+  --ink-2:color-mix(in srgb,var(--a-lift) 7%,#CFD5D7);
+  --muted:color-mix(in srgb,var(--a-lift) 9%,#A7AFB2);
+  --faint:color-mix(in srgb,var(--a-lift) 10%,#8B9497);
+  --apricot:#EDA470;
+  --danger:#E58270;
+  --amber:#DDAE52;
+  --blue:#7BA8DD;
+  --surface-today:color-mix(in srgb,var(--a-lift) 7%,#272C2F);
+  --line-soft:color-mix(in srgb,var(--a-lift) 7%,#31363A);
+  --scrim:rgba(8,10,11,.62);
+  /* A struck-through line at .55 vanished on a dark ground. */
+  --done-fade:.75;
+  --sh-1:0 1px 2px rgba(0,0,0,.3);
+  --sh-2:0 8px 24px -12px rgba(0,0,0,.55);
+  --sh-3:0 24px 60px -20px rgba(0,0,0,.66);
+  /* The lifted shade carries the accent here, so what sits on it goes dark. */
   --accent:var(--a-lift);
   --accent-2:var(--a-base);
-  --on-accent:#111611;
+  --on-accent:#14171A;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--ff);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -279,7 +302,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .tchip.done .tchip-tick{background:var(--c);border-color:var(--c)}
 .tchip.done .tchip-tick .ic{opacity:1}
 .tchip.done .tchip-body{text-decoration:line-through}
-.tchip.done{opacity:.6}
+.tchip.done{opacity:var(--done-fade)}
 /* Overdue takes over the chip's colour, so the icon follows the background
    rather than staying on the category hue. */
 .tchip.over{--fill:var(--danger-soft);--fill-hover:color-mix(in srgb,var(--danger) 18%,var(--tint-base));--edge:color-mix(in srgb,var(--danger) 55%,var(--tint-base));--label:color-mix(in srgb,var(--danger) 58%,var(--ink))}
@@ -314,7 +337,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .cal-tracked{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
   color:var(--muted);background:var(--surface-3);border-radius:20px;padding:3px 10px}
 .cal-tracked .ic{color:var(--faint)}
-.ev.done{opacity:.5}
+.ev.done{opacity:var(--done-fade)}
 .ev.done b{text-decoration:line-through}
 .nowline{position:absolute;left:0;right:0;height:0;border-top:1.6px solid var(--danger);z-index:4;pointer-events:none}
 .nowline::before{content:"";position:absolute;left:-4px;top:-4px;width:7px;height:7px;border-radius:50%;background:var(--danger)}
@@ -333,7 +356,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .mmore{font-size:10.5px;color:var(--faint);font-weight:600;text-align:left;padding-left:3px}
 .mchip{display:flex;align-items:center;gap:4px;font-size:10.5px;padding:1.5px 5px;border-radius:5px;background:var(--fill);color:var(--label);border-left:2px solid var(--edge);text-align:left;min-width:0}
 .mchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mchip.done{opacity:.5;text-decoration:line-through}
+.mchip.done{opacity:var(--done-fade);text-decoration:line-through}
 
 .overdue{width:296px;border-left:1px solid var(--line);background:var(--surface-2);display:flex;flex-direction:column;min-height:0;transition:width .18s ease}
 .overdue.collapsed{width:46px}
