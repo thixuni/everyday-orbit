@@ -52,19 +52,23 @@
   --sh-3:0 24px 60px -20px rgba(24,28,26,.30);
   --ff:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --fd:"Gabarito","Plus Jakarta Sans",system-ui,sans-serif;
+  /* Shown on the "any colour" swatch before one is picked. It stands for the
+     whole spectrum, so it belongs to neither theme and never changes. */
+  --wheel:conic-gradient(from .25turn,#C0517A,#B5791C,#6D7A2E,#2F7D7A,#3A6DA6,#6B5AC4,#C0517A);
 }
 
 /* ---- accent hues ----
-   Each names three shades and nothing else. Which of them becomes --accent
-   depends on the theme: on white the mid shade reads well and takes white
-   text, on a dark ground it disappears, so the light shade takes over and the
-   text on it goes dark. */
-:root,:root[data-accent="green"]{--a-base:#3F7D5C;--a-dark:#2E6047;--a-lift:#5FA37C}
-:root[data-accent="blue"]  {--a-base:#3A6DA6;--a-dark:#2B5482;--a-lift:#6B9BD2}
-:root[data-accent="violet"]{--a-base:#6B5AC4;--a-dark:#514497;--a-lift:#9A8BE6}
-:root[data-accent="rose"]  {--a-base:#C0517A;--a-dark:#963D5E;--a-lift:#E086A8}
-:root[data-accent="amber"] {--a-base:#B5791C;--a-dark:#8C5C13;--a-lift:#DDA84A}
-:root[data-accent="slate"] {--a-base:#54666B;--a-dark:#3E4D51;--a-lift:#8AA0A6}
+   An accent is three shades. Which of them becomes --accent depends on the
+   theme: on white the mid shade reads well and takes white text, on a dark
+   ground it disappears, so the light shade takes over and the text on it
+   goes dark.
+
+   The three are NOT listed here, one rule per hue. They are derived in
+   app.js from a single colour and written onto the root element, because an
+   accent can now be any colour the user picks and no stylesheet can hold a
+   rule for a colour that does not exist yet. What is below is only the
+   default, so the page has an accent before a line of script runs. */
+:root{--a-base:#3F7D5C;--a-dark:#305E46;--a-lift:#5CAD82}
 :root{--accent:var(--a-base);--accent-2:var(--a-dark);--accent-lift:var(--a-lift)}
 
 /* ---- the dark ramp. Only neutrals move; hues brighten to hold their own
@@ -616,23 +620,59 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .tm-controls{display:flex;flex-wrap:wrap;gap:6px}
 .modal-sm{width:min(420px,94vw)}
 
-/* ---------- settings ---------- */
-.set-group{padding-bottom:6px;margin-bottom:16px;border-bottom:1px solid var(--line)}
-.set-group:last-child{border-bottom:0;margin-bottom:0}
-.set-group .sec-label{display:block;margin-bottom:10px}
-.set-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:9px 0}
+/* ---------- settings ----------
+   Two columns of cards rather than one long column: the whole of settings is
+   meant to be in front of you at once, with nothing to scroll past. The
+   columns collapse to one below 900px, and only then may it scroll. */
+.modal.settings{width:min(920px,96vw);max-height:min(94dvh,960px)}
+.modal.settings .mbody{padding:15px}
+.set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.set-group{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-m);
+  padding:12px 15px 4px}
+.set-group .sec-label{display:block;margin-bottom:4px}
+.set-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;
+  padding:9px 0;border-top:1px solid var(--line-soft)}
+.set-row:first-of-type{border-top:0}
+.set-row.stack{grid-template-columns:minmax(0,1fr)}
+.set-row.stack .set-val{align-items:stretch}
 .set-lab{font-size:13px;font-weight:500;color:var(--ink)}
 .set-lab small{display:block;font-size:11.5px;font-weight:400;color:var(--muted);margin-top:2px}
 .set-val{display:flex;flex-direction:column;align-items:flex-end;gap:7px;min-width:0}
-.set-val .inp{min-width:170px}
+.set-val .inp{min-width:150px}
 .set-sub{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:900px){
+  .set-grid{grid-template-columns:minmax(0,1fr)}
+}
 
-/* the accent swatches paint themselves from the palette they name */
-.accents{display:flex;gap:7px}
-.accent-dot{width:24px;height:24px;border-radius:50%;flex:none;background:var(--a-base);
-  border:2px solid transparent;box-shadow:0 0 0 1px var(--line) inset;transition:transform .12s}
-.accent-dot:hover{transform:scale(1.1)}
-.accent-dot.on{border-color:var(--surface);box-shadow:0 0 0 2px var(--a-base)}
+/* Each swatch paints itself from --dot, set inline: the palette lives in
+   app.js now, and a swatch for a custom colour has no class to be styled by.
+   Reading --a-base here was the old bug -- it resolves on :root, so every
+   swatch showed whichever accent was already chosen. */
+/* Fixed circles rather than a stretched grid: swatches that grow with the
+   card turn into saucers and shove everything else down the panel. */
+.accents{display:grid;grid-template-columns:repeat(6,28px);gap:10px;justify-content:start}
+.accent-dot{width:28px;height:28px;border-radius:50%;background:var(--dot);
+  border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);
+  transition:transform .12s,box-shadow .12s;position:relative}
+.accent-dot:hover{transform:scale(1.08)}
+.accent-dot.on{box-shadow:0 0 0 2px var(--dot)}
+.accent-dot.on::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:8px;
+  margin:-4px 0 0 -4px;border-radius:50%;background:var(--on-accent)}
+
+/* The custom swatch IS the colour input, wearing the same circle -- a wrapper
+   with the input laid over it would not take a size, because a form control
+   carries its own and a parent shrink-wraps to it. Clicking it opens the
+   platform picker, which is the one dialog worth deferring to. */
+input.accent-custom{-webkit-appearance:none;appearance:none;padding:0;cursor:pointer;
+  background:var(--dot)}
+input.accent-custom::-webkit-color-swatch-wrapper{padding:0}
+input.accent-custom::-webkit-color-swatch{border:0;border-radius:50%}
+/* Before a colour is chosen it shows the spectrum instead of a colour. */
+input.accent-custom.empty{background:var(--wheel)}
+input.accent-custom.empty::-webkit-color-swatch{opacity:0}
+.accent-note{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-size:11.5px;color:var(--muted);width:100%}
+.accent-note b{font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;text-transform:uppercase}
 
 /* a plain switch, since a checkbox cannot be styled reliably */
 .switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;font-size:12.5px;color:var(--muted)}

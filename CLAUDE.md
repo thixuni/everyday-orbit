@@ -141,6 +141,22 @@ shades and nothing more: on white the mid shade takes white text, on a dark
 ground it vanishes, so the light shade becomes `--accent` and `--on-accent`
 goes dark.
 
+Those three shades are **not** in the stylesheet, one rule per hue. The accent
+can be any colour the user picks, and no stylesheet can hold a rule for a
+colour that does not exist yet — so `accentTrio()` works them out from a
+single colour and `applyAppearance()` writes them onto the root element. The
+CSS holds one default so the page has an accent before any script runs, and
+`ACCENTS` in app.js is the palette: presets are just colours that happen to
+have names. Two clamps keep a bad pick readable rather than refusing it — the
+mid shade is darkened until white text on it clears 4.5:1, the light shade is
+lightened until it clears 4.5:1 on a dark panel. Pick neon yellow and it comes
+back darkened; pick black and the light shade comes back grey.
+
+A swatch paints itself from `--dot`, set inline, and shows the shade the
+theme in force would actually use. Reading `--a-base` in the rule was the old
+bug: it resolves on `:root`, so every swatch showed whichever accent was
+already chosen.
+
 `src/timer.html` is a second window with its own stylesheet, so it cannot see
 any of this. It is *told*: `syncTimerWindow()` sends the resolved theme as
 `dark` in the payload and the window sets `data-theme` from it. That is why

@@ -763,13 +763,67 @@ function startWith(state){
 /* Theme and accent live on the root element, so a change is one attribute and
    the whole app follows. "system" sets nothing and lets the media query
    decide, which is the only way to track the OS switching at dusk. */
+/* An accent is one colour. The three shades the app runs on are worked out
+   from it, which is what lets the accent be any colour at all rather than one
+   of a fixed six -- a stylesheet cannot hold a rule for a colour nobody has
+   picked yet. The presets are just colours that happen to have names. */
 const ACCENTS=[
-  {id:"green", name:"Green"},
-  {id:"blue",  name:"Blue"},
-  {id:"violet",name:"Violet"},
-  {id:"rose",  name:"Rose"},
-  {id:"amber", name:"Amber"},
-  {id:"slate", name:"Slate"}];
+  {id:"green",   name:"Green",    hex:"#3F7D5C"},
+  {id:"teal",    name:"Teal",     hex:"#2F7D7A"},
+  {id:"blue",    name:"Blue",     hex:"#3A6DA6"},
+  {id:"indigo",  name:"Indigo",   hex:"#4C5FB5"},
+  {id:"violet",  name:"Violet",   hex:"#6B5AC4"},
+  {id:"plum",    name:"Plum",     hex:"#8B4F9E"},
+  {id:"rose",    name:"Rose",     hex:"#C0517A"},
+  {id:"red",     name:"Red",      hex:"#BC4B45"},
+  {id:"amber",   name:"Amber",    hex:"#B5791C"},
+  {id:"olive",   name:"Olive",    hex:"#6D7A2E"},
+  {id:"slate",   name:"Slate",    hex:"#54666B"}];
+
+/* ---- colour arithmetic, only ever used to build an accent ---- */
+function hex2rgb(h){h=String(h||"").replace("#","");
+  if(h.length===3)h=h.split("").map(c=>c+c).join("");
+  if(!/^[0-9a-f]{6}$/i.test(h))return [63,125,92];
+  return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16));}
+const rgb2hex=r=>"#"+r.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,"0")).join("");
+function rgb2hsl(c){const r=c[0]/255,g=c[1]/255,b=c[2]/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2;let h=0,s=0;
+  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);
+    h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h/=6;}
+  return [h*360,s*100,l*100];}
+function hsl2rgb(h,s,l){h=((h%360)+360)%360/360;s/=100;l/=100;
+  if(!s)return [l*255,l*255,l*255];
+  const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q;
+  const f=t=>{t=(t+1)%1;return t<1/6?p+(q-p)*6*t:t<1/2?q:t<2/3?p+(q-p)*(2/3-t)*6:p;};
+  return [f(h+1/3)*255,f(h)*255,f(h-1/3)*255];}
+const relLum=c=>{const f=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);};
+  return .2126*f(c[0])+.7152*f(c[1])+.0722*f(c[2]);};
+const contrast=(a,b)=>{const x=relLum(a),y=relLum(b);
+  return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+
+/* The two clamps are what keep a bad pick readable rather than refusing it:
+   the mid shade has to carry white text on a light page, and the light shade
+   has to be legible on a dark panel. Pick neon yellow and it comes back
+   darkened; pick black and the light shade comes back grey. */
+const WHITE=[255,255,255],DARK_PANEL=[28,32,35];
+function accentTrio(hex){
+  const c=rgb2hsl(hex2rgb(hex)),h=c[0],s=Math.min(92,c[1]);
+  let l=c[2],base=hsl2rgb(h,s,l);
+  while(contrast(base,WHITE)<4.5&&l>10){l-=1;base=hsl2rgb(h,s,l);}
+  let li=Math.min(94,l+15),lift=hsl2rgb(h,s,li);
+  while(contrast(lift,DARK_PANEL)<4.5&&li<94){li+=1;lift=hsl2rgb(h,s,li);}
+  return {base:rgb2hex(base),dark:rgb2hex(hsl2rgb(h,s,Math.max(0,l-9))),lift:rgb2hex(lift)};
+}
+function setCustomAccent(hex){
+  S.prefs.accent="custom";
+  S.prefs.accentHex=String(hex||"").toUpperCase();
+  applyAppearance();
+}
+/* What the accent actually is, preset or not. */
+function accentHex(){const p=S.prefs||{};
+  if(p.accent==="custom")return p.accentHex||ACCENTS[0].hex;
+  const a=ACCENTS.filter(x=>x.id===p.accent)[0];
+  return a?a.hex:ACCENTS[0].hex;}
 const THEMES=[{id:"light",name:"Light",icon:"i-sun"},{id:"dark",name:"Dark",icon:"i-moon"},
   {id:"system",name:"System",icon:"i-laptop"}];
 
@@ -784,23 +838,40 @@ function applyAppearance(){
   if(theme==="system")r.removeAttribute("data-theme");
   else r.setAttribute("data-theme",theme);
   r.setAttribute("data-accent",p.accent||"green");
+  /* The three shades are written onto the root, where every rule in the
+     stylesheet reads them. The CSS holds only a default for the moment
+     before this first runs. */
+  const t=accentTrio(accentHex());
+  r.style.setProperty("--a-base",t.base);
+  r.style.setProperty("--a-dark",t.dark);
+  r.style.setProperty("--a-lift",t.lift);
 }
 
 /* ============ settings ============ */
 function settingsModal(){
   const n=S.tasks.length+S.routines.length+S.notes.length;
   const p=S.prefs||{};
-  const row=(label,inner,note)=>'<div class="set-row"><div class="set-lab">'+esc(label)+
+  const row=(label,inner,note,cls)=>'<div class="set-row'+(cls?" "+cls:"")+'"><div class="set-lab">'+esc(label)+
     (note?'<small>'+esc(note)+'</small>':"")+'</div><div class="set-val">'+inner+'</div></div>';
+  const group=(title,rows)=>'<div class="set-group"><div class="sec-label">'+esc(title)+'</div>'+rows+'</div>';
 
   const themePick='<div class="seg">'+THEMES.map(t=>
     '<button data-act="set-theme" data-v="'+t.id+'" aria-pressed="'+((p.theme||"system")===t.id)+'">'+
     icon(t.icon,"ic-14")+esc(t.name)+'</button>').join("")+'</div>';
 
-  const accentPick='<div class="accents">'+ACCENTS.map(a=>
-    '<button class="accent-dot'+((p.accent||"green")===a.id?" on":"")+'" data-accent="'+a.id+'" '+
-    'data-act="set-accent" data-v="'+a.id+'" title="'+esc(a.name)+'" aria-label="'+esc(a.name)+'"'+
-    ' aria-pressed="'+((p.accent||"green")===a.id)+'"></button>').join("")+'</div>';
+  /* A swatch shows the shade the theme in force would actually use, so what
+     you press is what you get rather than the light-mode version of it. */
+  const dark=isDark(),cur=p.accent||"green",curHex=accentHex();
+  const shade=h=>{const t=accentTrio(h);return dark?t.lift:t.base;};
+  const swatch=a=>'<button class="accent-dot'+(cur===a.id?" on":"")+'" style="--dot:'+shade(a.hex)+'"'+
+    ' data-act="set-accent" data-v="'+a.id+'" title="'+esc(a.name)+'" aria-label="'+esc(a.name)+'"'+
+    ' aria-pressed="'+(cur===a.id)+'"></button>';
+  const accentPick='<div class="accents">'+ACCENTS.map(swatch).join("")+
+    '<input type="color" class="accent-dot accent-custom'+(cur==="custom"?" on":" empty")+'"'+
+      ' style="--dot:'+shade(curHex)+'" value="'+esc(curHex)+'" data-act="set-accent-hex"'+
+      ' title="Any colour you like" aria-label="Custom accent colour"></div>'+
+    '<div class="accent-note"><span>'+(cur==="custom"?"Your own colour":
+      esc((ACCENTS.filter(a=>a.id===cur)[0]||ACCENTS[0]).name))+'</span><b>'+esc(curHex)+'</b></div>';
 
   const days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const weekPick='<select class="inp" data-act="set-pref" data-k="weekStart">'+
@@ -824,22 +895,20 @@ function settingsModal(){
         '</div>':"")
     : '<span class="mnone">Automatic backups need the desktop app</span>';
 
-  openModal('<div class="modal narrow" role="dialog" aria-modal="true" aria-label="Settings">'+
+  openModal('<div class="modal settings" role="dialog" aria-modal="true" aria-label="Settings">'+
     '<div class="mhead2">'+icon("i-settings","ic-18")+'<h2>Settings</h2><button class="icon-btn" data-act="close" aria-label="Close">'+icon("i-x")+'</button></div>'+
-    '<div class="mbody">'+
+    '<div class="mbody"><div class="set-grid">'+
 
-    '<div class="set-group"><div class="sec-label">Appearance</div>'+
+    group("Appearance",
       row("Theme",themePick,"System follows Windows")+
-      row("Accent colour",accentPick)+
-    '</div>'+
+      row("Accent colour",accentPick,"Any of these, or a colour of your own",'stack'))+
 
-    '<div class="set-group"><div class="sec-label">Dates and times</div>'+
+    group("Dates and times",
       row("Week starts on",weekPick)+
       row("24-hour clock",clockPick)+
-      row("Open the planner on",launchPick)+
-    '</div>'+
+      row("Open the planner on",launchPick))+
 
-    '<div class="set-group"><div class="sec-label">Connections</div>'+
+    group("Connections",
       row("Obsidian vault",
         (hasDesktop()
           ? '<div class="set-sub">'+
@@ -851,10 +920,9 @@ function settingsModal(){
         vaultPath()?vaultPath()+"/Everyday Orbit":"Documents are written as .md, both ways")+
       row("Google Calendar",
         '<button class="btn btn-sm" disabled>'+icon("i-calendar","ic-14")+'Not connected</button>',
-        "Two-way sync is being built — not available yet")+
-    '</div>'+
+        "Two-way sync is being built — not available yet"))+
 
-    '<div class="set-group"><div class="sec-label">Your data</div>'+
+    group("Your data",
       row("Backup",'<div class="set-sub">'+
         '<button class="btn btn-sm" data-act="export">'+icon("i-download","ic-14")+'Back up now</button>'+
         '<button class="btn btn-sm" data-act="import">'+icon("i-upload","ic-14")+'Restore</button>'+
@@ -863,10 +931,9 @@ function settingsModal(){
       row("Automatic backups",backup)+
       row("Clear everything",
         '<button class="btn btn-sm btn-danger" data-act="reset-all">'+icon("i-trash","ic-14")+'Clear everything</button>',
-        "Removes every task, routine, note, document and tracked hour")+
-    '</div>'+
+        "Removes every task, routine, note, document and tracked hour"))+
 
-    '</div><div class="mfoot"><span class="mnone">Everyday Orbit</span>'+
+    '</div></div><div class="mfoot"><span class="mnone">Everyday Orbit</span>'+
     '<div class="spacer" style="flex:1"></div><button class="btn btn-primary" data-act="close">Done</button></div></div>');
 }
 
@@ -1347,6 +1414,24 @@ document.addEventListener("input",function(e){
   if(t.id==="aiText"&&e.inputType==="insertLineBreak")addAction(t.closest(".ai-add").querySelector('[data-act="ai-add"]').dataset.nid);
 });
 document.addEventListener("input",function(e){
+  /* A colour input fires all the way through a drag. The page follows along
+     so the choice can be judged in place, but the modal is left alone --
+     redrawing it would tear the picker off its own input. */
+  if(e.target&&e.target.dataset&&e.target.dataset.act==="set-accent-hex"){
+    setCustomAccent(e.target.value);
+    const note=document.querySelector(".accent-note");
+    if(note){
+      const b=note.querySelector("b");if(b)b.textContent=S.prefs.accentHex;
+      const lab=note.querySelector("span");if(lab)lab.textContent="Your own colour";
+    }
+    const tri=accentTrio(S.prefs.accentHex);
+    e.target.classList.remove("empty");
+    e.target.classList.add("on");
+    e.target.style.setProperty("--dot",isDark()?tri.lift:tri.base);
+    document.querySelectorAll('[data-act="set-accent"]').forEach(function(el){
+      el.classList.remove("on");el.setAttribute("aria-pressed","false");});
+    return;
+  }
   if(e.target&&e.target.id==="dcMd"){
     const prev=el("dcPrev");
     if(prev)prev.innerHTML=mdToHtml(e.target.value);
@@ -1385,6 +1470,9 @@ document.addEventListener("change",function(e){
   const t=e.target;
   if(t.id==="importFile"){importPicked(t.files&&t.files[0]);return;}
   if(t.dataset&&t.dataset.act==="f"){V.f[t.dataset.k]=t.value;renderView();return;}
+  if(t.dataset&&t.dataset.act==="set-accent-hex"){
+    setCustomAccent(t.value);save("prefs");syncTimerWindow();render();settingsModal();return;
+  }
   if(t.dataset&&t.dataset.act==="set-pref"){
     const k=t.dataset.k,v=t.type==="checkbox"?t.checked:t.value;
     if(k.indexOf(".")>-1){const[a,b]=k.split(".");
@@ -2004,12 +2092,12 @@ function removeDocFromVault(d){
 function syncTimerWindow(){
   const o=desktop();if(!o||!o.timer)return;
   const r=running();
-  const dark=isDark();
-  if(!r){try{o.timer({state:"idle",dark:dark});}catch(e){}return;}
+  const dark=isDark(),tri=accentTrio(accentHex()),accent=dark?tri.lift:tri.base;
+  if(!r){try{o.timer({state:"idle",dark:dark,accent:accent});}catch(e){}return;}
   const t=taskById(r.task);if(!t)return;
   const est=tEst(t)*60,secs=liveSecs();
   try{o.timer({state:r.since?"running":"paused",title:t.title,task:t.id,
-    secs:secs,est:est,colour:cat(t.cat).color,over:est>0&&secs>est,dark:dark});}catch(e){}
+    secs:secs,est:est,colour:cat(t.cat).color,over:est>0&&secs>est,dark:dark,accent:accent});}catch(e){}
 }
 
 /* ============ time analytics ============ */

@@ -122,6 +122,8 @@ svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke
   function paint(){
     if(typeof state.dark === "boolean")
       document.documentElement.setAttribute("data-theme", state.dark ? "dark" : "light");
+    if(state.accent)
+      document.documentElement.style.setProperty("--accent", state.accent);
     var live = state.state === "running" || state.state === "paused";
     el("live").hidden = !live;
     el("idle").hidden = live;
