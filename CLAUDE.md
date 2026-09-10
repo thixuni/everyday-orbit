@@ -127,6 +127,24 @@ because it is on the page once already; showing it twice would make one
 piece of work look like two. Missed routines fold away past `MISS_SHOWN`:
 they are the least actionable thing there, and ten of them buried the rest.
 
+The dashboard is the page the planner opens on. Everyone set up before it
+existed has `launch:"calendar"` saved — the old default, not a choice — so
+start-up moves them once; picking a page in Settings sets `launchSet` and is
+never overridden.
+
+It is also where the caret is most likely to be, in the scratch pad, so
+nothing live on it redraws the page. Up next is swapped in place every 30
+seconds (`upNextHtml()` into `#dashNext`), and the per-second timer tick
+writes the running task's clock and today's total into `data-live` and
+`data-live-total` nodes directly. A full `render()` there would throw the
+caret out of whatever is being typed.
+
+"Make task" and "Save as note" in the scratch pad work on the selection, or
+on the line the caret is in when nothing is selected, and they *move* the
+text rather than copy it. The toolbar keeps the selection alive through the
+click the same way the formatting buttons do: they are in the `mousedown`
+guard that calls `saveSel()` and prevents the default.
+
 ### Settings
 
 Settings is a sidebar of sections with one pane open at a time — the tab

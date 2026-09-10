@@ -77,7 +77,7 @@ function blankState(){
   return {categories:baseCategories(),tasks:[],routines:[],notes:[],completions:{},
     activity:[],docs:[],sessions:[],
     prefs:{hidden:[],scratch:"",setup:false,vault:"",
-      theme:"system",accent:"green",weekStart:1,clock24:false,launch:"calendar",
+      theme:"system",accent:"green",weekStart:1,clock24:false,launch:"dashboard",
       autoBackup:{on:false,dir:"",every:"week",last:0},
       running:null}};
 }
@@ -119,7 +119,7 @@ function sampleState(){
    {id:uid("n"),title:"How this planner works",cat:"personal",tags:["start-here"],pinned:true,updated:Date.now(),
     html:"<p>Six sections, all sharing the same tasks and categories.</p>"+
       "<h2>Dashboard</h2><p>Today on one page: tasks due today, today’s routines, anything overdue or missed, open action items from your notes, and a scratch pad for a quick thought.</p>"+
-      "<h2>Calendar</h2><p>Your default view. Tasks sit in the band across the top, routines sit in the time grid. The <b>Catch-up</b> panel on the right collects anything overdue so you can clear it in one place.</p>"+
+      "<h2>Calendar</h2><p>Week and month. Tasks sit in the band across the top, routines sit in the time grid. The <b>Catch-up</b> panel on the right collects anything overdue so you can clear it in one place.</p>"+
       "<h2>Tasks</h2><p>A board you can drag cards across, or a list grouped by month. Quick filters sit on one row, and Advanced opens status, category, priority and date range.</p>"+
       "<h2>Matrix</h2><p>Every task lands in a quadrant based on whether it is urgent, important, both or neither. Closest due date comes first. Anything you have not judged yet waits in the tray at the bottom.</p>"+
       "<h2>Routines</h2><p>Anything that repeats: daily, weekdays, chosen days, or every few days. Tick the day squares to keep a streak going.</p>"+
@@ -249,7 +249,7 @@ function overdueItems(){
 }
 
 /* ============ view state ============ */
-const V={view:"calendar",calMode:"week",anchor:today(),taskMode:"board",q:"",odOpen:true,adv:false,sheet:null,range:"week",
+const V={view:"dashboard",calMode:"week",anchor:today(),taskMode:"board",q:"",odOpen:true,adv:false,sheet:null,range:"week",
   f:{quick:"open",status:"",cat:"",quad:"",from:"",to:"",sort:"due"},noteId:null,noteTag:""};
 
 /* ============ rail + topbar ============ */
@@ -477,6 +477,7 @@ function overduePanel(){
    to put a thought without going to Notes. Nothing here is its own data --
    the scratch pad is the same one Notes opens, and every list is read
    straight from tasks, routines and notes. */
+function gcalTimedToday(){return [];}
 function todayItems(){
   const ts=TODAY();
   /* Open first, finished at the bottom, where they read as progress rather
@@ -522,7 +523,8 @@ function viewDashboard(){
 
   const taskRow=t=>{const c=cat(t.cat),done=t.status==="completed",est=tEst(t);
     return dashRow({color:c.color,done:done,tick:tickBtn(t),open:'data-act="task" data-id="'+t.id+'"',title:t.title,
-      meta:esc(c.name)+(est?' · '+esc(fmtDur(est*60))+' estimate':"")});};
+      meta:esc(c.name)+(est?' · '+esc(fmtMins(est))+' estimate':""),
+      end:done?"":timerBtn(t)});};
   const routineRow=r=>{const c=cat(r.cat),done=doneR(r,ts);
     /* A routine whose time has come and gone without a tick says so -- in
        amber, not red. It is behind, not missed; there is still today. */
@@ -533,7 +535,12 @@ function viewDashboard(){
       end:r.time?esc(fmtTime(r.time)):""});};
 
   const openT=d.tasks.filter(isOpen).length,leftR=d.routines.filter(r=>!doneR(r,ts)).length;
-  const todayCard='<section class="dcard dash-today"><header class="dcard-h"><h2>Today</h2></header>'+
+  const qc=S.categories.some(c=>c.id===S.prefs.quickCat)?S.prefs.quickCat:S.categories[0].id;
+  const quick='<div class="dquick">'+icon("i-plus","ic-14")+
+    '<input id="dashQuick" placeholder="Add a task for today, then press Enter" aria-label="Add a task for today" autocomplete="off">'+
+    '<select id="dashQuickCat" aria-label="Category for the new task">'+S.categories.map(c=>
+      '<option value="'+c.id+'"'+(c.id===qc?" selected":"")+'>'+esc(c.name)+'</option>').join("")+'</select></div>';
+  const todayCard='<section class="dcard dash-today"><header class="dcard-h"><h2>Today</h2></header>'+quick+
     dashGroup("Tasks due today",openT,d.tasks.map(taskRow).join(""),"Nothing due today.")+
     dashGroup("Routines",leftR,d.routines.map(routineRow).join(""),"No routines fall on today.")+
     '</section>';
@@ -563,11 +570,140 @@ function viewDashboard(){
   const scratch='<section class="dcard dash-scratch"><header class="dcard-h"><h2>Scratch pad</h2>'+
       '<small>Saves as you type</small></header>'+
     '<div class="rte-bar">'+["bold|B","italic|I","insertUnorderedList|•"].map(x=>{const q=x.split("|");
-      return '<button data-act="rte" data-cmd="'+q[0]+'" data-scratch="1" aria-label="'+q[0]+'">'+q[1]+'</button>';}).join("")+'</div>'+
+      return '<button data-act="rte" data-cmd="'+q[0]+'" data-scratch="1" aria-label="'+q[0]+'">'+q[1]+'</button>';}).join("")+
+      '<span class="spacer" style="flex:1"></span>'+
+      '<button class="rte-txt" data-act="scratch-task" title="Turn the selected text, or the line you are on, into a task">'+icon("i-check","ic-14")+'Make task</button>'+
+      '<button class="rte-txt" data-act="scratch-note" title="Save the selected text, or the line you are on, as a note">'+icon("i-note","ic-14")+'Save as note</button>'+
+    '</div>'+
     '<div class="rte" id="scratchPad" contenteditable="true" data-ph="Anything you need out of your head…">'+(S.prefs.scratch||"")+'</div>'+
     '</section>';
 
-  return '<div class="dash"><div class="dash-col">'+todayCard+attn+'</div>'+scratch+'</div>';
+  return '<div class="dash"><div class="dash-col">'+todayCard+attn+'</div>'+
+    '<div class="dash-side">'+'<section class="dcard dash-next" id="dashNext">'+upNextHtml()+'</section>'+
+    timeTodayCard()+scratch+'</div></div>';
+}
+/* A small play button on a task row. Running shows the live clock and pauses. */
+function timerBtn(t){
+  const r=running(),on=r&&r.task===t.id&&r.since;
+  return '<button class="dplay'+(on?" on":"")+'" data-act="timer-toggle" data-id="'+t.id+'" '+
+    'aria-label="'+(on?"Pause the timer":"Start the timer")+'" title="'+(on?"Pause":"Start timing this task")+'">'+
+    icon(on?"i-pause":"i-play","ic-14")+(on?'<span class="num" data-live="'+t.id+'">'+esc(fmtDur(liveSecs()))+'</span>':"")+'</button>';
+}
+
+/* ---- up next ----
+   What is on now and what comes next, from anything in today with a time.
+   Redrawn in place once a minute, never by a full render, so it cannot take
+   the caret out of the scratch pad. */
+function timedToday(){
+  const ts=TODAY(),m=tm=>{const x=tm.split(":").map(Number);return x[0]*60+x[1];};
+  return todayItems().routines.filter(r=>r.time&&!doneR(r,ts))
+    .map(r=>({title:r.title,color:cat(r.cat).color,start:m(r.time),end:m(r.time)+(Number(r.dur)||0),
+      act:'data-act="routine" data-id="'+r.id+'" data-date="'+ts+'"'}))
+    .concat(gcalTimedToday())
+    .sort((a,b)=>a.start-b.start);
+}
+function inMins(n){const h=Math.floor(n/60),m=n%60;return (h?h+"h ":"")+(m||!h?m+" min":"").trim();}
+function upNextHtml(){
+  const now=new Date().getHours()*60+new Date().getMinutes(),items=timedToday();
+  const cur=items.filter(x=>x.start<=now&&now<x.end)[0];
+  const next=items.filter(x=>x.start>now)[0];
+  const clock=mn=>fmtTime(pad(Math.floor(mn/60)%24)+":"+pad(mn%60));
+  const line=(label,x,when)=>'<button class="dnext" style="--c:'+x.color+'" '+x.act+'>'+
+    '<span class="dnext-l">'+esc(label)+'</span><b>'+esc(x.title)+'</b><span class="dnext-w">'+esc(when)+'</span></button>';
+  let body="";
+  if(cur)body+=line("Now",cur,"until "+clock(cur.end));
+  if(next)body+=line("Next",next,"in "+inMins(next.start-now)+" · "+clock(next.start));
+  if(!body)body='<p class="dempty">Nothing else with a time today.</p>';
+  return '<header class="dcard-h"><h2>Up next</h2></header><div class="dnext-list">'+body+'</div>';
+}
+
+/* ---- time tracked today ----
+   Summed from the session rows like every other total, plus the run in
+   progress, which has no row until it stops. */
+function trackedToday(){
+  const ts=TODAY(),by={};
+  S.sessions.forEach(x=>{if(ymd(new Date(x.start))!==ts)return;by[x.task]=(by[x.task]||0)+(x.secs||0);});
+  const r=running();
+  if(r&&ymd(new Date(r.began))===ts)by[r.task]=(by[r.task]||0)+liveSecs();
+  const rows=Object.keys(by).map(id=>({t:taskById(id),secs:by[id]})).filter(x=>x.t&&(x.secs>0||(r&&r.task===x.t.id)))
+    .sort((a,b)=>b.secs-a.secs);
+  return {rows:rows,total:rows.reduce((n,x)=>n+x.secs,0)};
+}
+const totalMins=secs=>{const m=Math.floor(secs/60);return m?fmtMins(m):"0m";};
+function timeTodayCard(){
+  const d=trackedToday(),max=d.rows.length?d.rows[0].secs:0,r=running();
+  return '<section class="dcard dash-time"><header class="dcard-h"><h2>Time today</h2>'+
+    '<span class="dtotal num" id="dashTotal">'+esc(totalMins(d.total))+'</span></header>'+
+    (d.rows.length?'<div class="dtime">'+d.rows.map(x=>{const c=cat(x.t.cat),live=r&&r.task===x.t.id;
+      return '<button class="dtrow" data-act="task" data-id="'+x.t.id+'" style="--c:'+c.color+'">'+
+        '<span class="dtrow-t">'+esc(x.t.title)+'</span>'+
+        '<span class="dtrow-v num'+(live?" live":"")+'"'+(live?' data-live-total="'+x.t.id+'"':"")+'>'+esc(live?fmtDur(x.secs):fmtMins(x.secs/60))+'</span>'+
+        '<span class="dtrow-bar"><i style="width:'+Math.max(3,x.secs/max*100).toFixed(1)+'%"></i></span></button>';}).join("")+'</div>'
+      :'<p class="dempty dtime-empty">Nothing tracked yet. Press '+icon("i-play","ic-14")+' on a task to start.</p>')+
+    '</section>';
+}
+
+/* ---- scratch pad to task or note ----
+   Works on the selection, or on the line the caret is in when nothing is
+   selected. What is converted is moved, not copied: the point is that the
+   pad empties as thoughts find their place. */
+function scratchPick(){
+  const pad=el("scratchPad");if(!pad)return null;
+  restoreSel();
+  const sel=window.getSelection();
+  if(!sel||!sel.rangeCount||!pad.contains(sel.anchorNode))return null;
+  const range=sel.getRangeAt(0);
+  if(!range.collapsed){
+    const box=document.createElement("div");box.appendChild(range.cloneContents());
+    return {text:sel.toString(),html:box.innerHTML,remove:()=>range.deleteContents()};
+  }
+  let n=sel.anchorNode;
+  while(n&&n.parentNode!==pad)n=n.parentNode;
+  if(!n||n===pad)return null;
+  /* A caret in a bare text node at the top level: the line is that node. */
+  const text=n.textContent||"";
+  const html=n.nodeType===1?n.outerHTML:esc(text);
+  return {text:text,html:html,remove:()=>n.parentNode&&n.parentNode.removeChild(n)};
+}
+/* Moving text out can leave the husk of a list or paragraph behind. */
+function scratchCommit(){
+  const pad=el("scratchPad");if(!pad)return;
+  pad.querySelectorAll("li,ul,ol,p,div").forEach(n=>{
+    if(!n.textContent.trim()&&!n.querySelector("img"))n.remove();});
+  S.prefs.scratch=pad.innerHTML;save("prefs");
+}
+function scratchToTask(){
+  const p=scratchPick();
+  const lines=p?p.text.split(/\n+/).map(x=>x.replace(/^\s*[•\-*]\s*/,"").trim()).filter(Boolean):[];
+  if(!lines.length){toast("Select some text in the scratch pad, or click into a line");return;}
+  const made=lines.map(line=>{
+    const t={id:uid("t"),title:line.slice(0,200),desc:"",due:"",start:"",cat:S.categories[0].id,status:"backlog",
+      urgent:null,important:null,est:0,tags:[],links:[],subtasks:[],attachments:[],created:TODAY(),completedAt:null};
+    S.tasks.push(t);logAct(t.id,"created","Created from the scratch pad");return t;});
+  p.remove();scratchCommit();save("tasks");
+  /* One task opens so its date and category can be set straight away. */
+  if(made.length===1){render();openSheet(made[0].id);toast("Moved into a task");}
+  else{render();toast(made.length+" tasks added to your backlog");}
+}
+function scratchToNote(){
+  const p=scratchPick();
+  const text=p?p.text.trim():"";
+  if(!text){toast("Select some text in the scratch pad, or click into a line");return;}
+  const title=text.split(/\n/)[0].replace(/^\s*[•\-*]\s*/,"").trim().slice(0,80);
+  const nn={id:uid("n"),title:title,cat:S.categories[0].id,tags:[],pinned:false,html:p.html,actions:[],updated:Date.now()};
+  S.notes.unshift(nn);p.remove();scratchCommit();save("notes");render();
+  toast("Saved to Notes as “"+title+"”");
+}
+function quickAdd(){
+  const inp=el("dashQuick");if(!inp)return;
+  const title=inp.value.trim();if(!title)return;
+  const c=(el("dashQuickCat")||{}).value||S.categories[0].id;
+  const t={id:uid("t"),title:title,desc:"",due:TODAY(),start:"",cat:c,status:"planned",
+    urgent:null,important:null,est:0,tags:[],links:[],subtasks:[],attachments:[],created:TODAY(),completedAt:null};
+  S.tasks.push(t);save("tasks");logAct(t.id,"created","Created this task");
+  render();
+  /* Stay in the box, ready for the next one. */
+  const again=el("dashQuick");if(again)again.focus();
 }
 
 function viewCalendar(){
@@ -1010,7 +1146,7 @@ function settingsModal(){
     const weekPick='<select class="inp" data-act="set-pref" data-k="weekStart">'+
       [1,0,6].concat([2,3,4,5]).map(d=>'<option value="'+d+'"'+(weekStart()===d?" selected":"")+'>'+days[d]+'</option>').join("")+'</select>';
     const launchPick='<select class="inp" data-act="set-pref" data-k="launch">'+
-      NAV.map(v=>'<option value="'+v.id+'"'+((p.launch||"calendar")===v.id?" selected":"")+'>'+esc(v.name)+'</option>').join("")+'</select>';
+      NAV.map(v=>'<option value="'+v.id+'"'+((p.launch||"dashboard")===v.id?" selected":"")+'>'+esc(v.name)+'</option>').join("")+'</select>';
 
     pane=sec("Calendar",
         field("Start week on:",weekPick)+
@@ -1483,6 +1619,8 @@ document.addEventListener("click",function(e){
     case "new-note":{const nn={id:uid("n"),title:"",cat:S.categories[0].id,tags:[],pinned:false,html:"",actions:[],updated:Date.now()};
       S.notes.unshift(nn);V.view="notes";V.noteId=nn.id;V.q="";save("notes");render();const ti=el("noteTitle");if(ti)ti.focus();break;}
     case "note-open":V.noteId=id;renderView();break;
+    case "scratch-task":scratchToTask();break;
+    case "scratch-note":scratchToNote();break;
     case "dash-more":V.dashAll=!V.dashAll;renderView();break;
     case "dash-note":V.view="notes";V.noteId=id;V.q="";render();break;
     case "note-tag":V.noteTag=n.dataset.v;renderView();break;
@@ -1546,7 +1684,7 @@ document.addEventListener("click",function(e){
 });
 document.addEventListener("mousedown",function(e){
   const t=e.target;if(!t||!t.closest)return;
-  const b=t.closest('[data-act="rte"],[data-act="rte-link"]');
+  const b=t.closest('[data-act="rte"],[data-act="rte-link"],[data-act="scratch-task"],[data-act="scratch-note"]');
   if(b){saveSel();e.preventDefault();}
 });
 document.addEventListener("selectionchange",function(){
@@ -1593,6 +1731,7 @@ document.addEventListener("keydown",function(e){
     const b=document.querySelector('[data-act="rte-link-apply"]');if(b)b.click();return;}
   if(e.key==="Enter"&&e.target.id==="aiText"){e.preventDefault();
     const b=document.querySelector('[data-act="ai-add"]');if(b)addAction(b.dataset.nid);return;}
+  if(e.key==="Enter"&&e.target.id==="dashQuick"){e.preventDefault();quickAdd();return;}
   if(e.key==="Enter"&&e.target.id==="rTitle"){e.preventDefault();
     const b=document.querySelector('[data-act="routine-save"]');if(b)b.click();return;}
   /* The sheet has no save button: leaving the field is what commits it. */
@@ -1617,6 +1756,7 @@ document.addEventListener("keydown",function(e){
 document.addEventListener("change",function(e){
   const t=e.target;
   if(t.id==="importFile"){importPicked(t.files&&t.files[0]);return;}
+  if(t.id==="dashQuickCat"){S.prefs.quickCat=t.value;save("prefs");return;}
   if(t.dataset&&t.dataset.act==="f"){V.f[t.dataset.k]=t.value;renderView();return;}
   if(t.dataset&&t.dataset.act==="set-accent-hex"){
     setCustomAccent(t.value);save("prefs");syncTimerWindow();render();settingsModal();return;
@@ -1627,6 +1767,7 @@ document.addEventListener("change",function(e){
       S.prefs[a]=Object.assign({},S.prefs[a]||{});S.prefs[a][b]=v;
       if(a==="autoBackup"&&b==="on"&&v&&!S.prefs.autoBackup.dir)pickBackupFolder();
     }else S.prefs[k]=(k==="weekStart")?Number(v):v;
+    if(k==="launch")S.prefs.launchSet=true;
     save("prefs");applyAppearance();render();settingsModal();return;
   }
   if(t.dataset&&t.dataset.act==="sh-set"){
@@ -2302,9 +2443,11 @@ applyAppearance();
 /* On "system" the OS can change the theme under us at dusk. The page follows
    by itself through the media query; the timer window has to be told. */
 try{matchMedia("(prefers-color-scheme:dark)").addEventListener("change",syncTimerWindow);}catch(e){}
+if(S.prefs&&!S.prefs.launchSet&&S.prefs.launch==="calendar"){S.prefs.launch="dashboard";save("prefs");}
 if(S.prefs&&S.prefs.launch&&NAV.some(v=>v.id===S.prefs.launch)){V.view=S.prefs.launch;render();}
 maybeAutoBackup();
 setInterval(()=>{if(V.view==="calendar"&&V.calMode==="week"&&!el("modalRoot").innerHTML)renderView();},60000);
+setInterval(()=>{const n=el("dashNext");if(n&&V.view==="dashboard")n.innerHTML=upNextHtml();},30000);
 
 /* The clock ticks in place. A full render every second would fight anything
    being typed, so only the two readouts are touched. */
@@ -2313,6 +2456,12 @@ setInterval(function(){
   if(!r||!r.since)return;
   const t=taskById(r.task);if(!t)return;
   const secs=liveSecs(),est=tEst(t)*60,over=est&&secs>est;
+  if(V.view==="dashboard"){
+    document.querySelectorAll('[data-live="'+r.task+'"]').forEach(n=>{n.textContent=fmtDur(secs);});
+    const tt=el("dashTotal"),td=trackedToday();
+    if(tt)tt.textContent=totalMins(td.total);
+    td.rows.forEach(x=>{const v=document.querySelector('[data-live-total="'+x.t.id+'"]');if(v)v.textContent=fmtDur(x.secs);});
+  }
   const bar=document.querySelector(".tbar-time");
   if(bar){
     bar.innerHTML=esc(fmtDur(secs))+(est?"<em> of "+esc(fmtMins(est/60))+"</em>":"");
