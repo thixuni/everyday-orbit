@@ -217,6 +217,13 @@ Main sections — the calendar, the board, notes, the dashboard — are painted
 lift off it instead of everything sitting at one grey. Paint a new main area
 with `--canvas`, and anything that should read as a card on it with `--surface`.
 
+Calendar blocks and chips take their category colour through `--ev-fill`,
+`--ev-label` and `--ev-time`. Light mode puts a strong tint in the text; dark
+cannot — a title that is 58% category colour on a dark block measured 5.3:1 and
+read as mush — so dark makes the text mostly ink and lets the colour ride in the
+fill, the edge and the icon. A finished item in dark swaps to the quieter time
+tone (`--label-done`) rather than fading a light title into its block.
+
 Anything tinted is derived with `color-mix()` from `--surface`, never
 written twice, which is why `--tint-base` is a variable. Add a soft colour the
 same way or it will be wrong in one of the two themes. An accent names three

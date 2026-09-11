@@ -38,6 +38,15 @@
      near-black as the page behind Routines and Matrix, so the cards and
      panels on it lift off rather than all sitting at one grey. */
   --canvas:var(--surface);
+  /* Calendar blocks and chips: how much of the category colour goes into the
+     fill, the title and the time. Light mode can carry a strong tint in the
+     text; dark mode cannot, so there the text is mostly ink and the colour
+     rides in the fill, the edge and the icon. */
+  --ev-fill:10%;
+  --ev-label:58%;
+  --ev-time:42%;
+  --ev-time-base:var(--muted);
+  --ev-done-mix:100%;
   --surface-today:color-mix(in srgb,var(--a-base) 4%,#FDFDFD);
   --line-soft:color-mix(in srgb,var(--a-base) 6%,#F2F3F2);
   --scrim:rgba(24,28,26,.38);
@@ -108,9 +117,16 @@
     --line-soft:color-mix(in srgb,var(--a-lift) 7%,#282E31);
     --scrim:rgba(0,0,0,.68);
     /* A struck-through line at .55 vanished on a dark ground. */
-    --done-fade:.75;
+    --done-fade:.9;
   --knob:var(--muted);
   --canvas:var(--ground);
+  /* Measured over every category colour: titles at least 8.3:1 on their
+     block, times 6.8:1, finished items 5.8:1 even faded and struck through. */
+  --ev-fill:12%;
+  --ev-label:22%;
+  --ev-time:18%;
+  --ev-time-base:var(--ink-2);
+  --ev-done-mix:0%;
     /* Deeper than light mode: a soft shadow does not register on near-black. */
     --sh-1:0 1px 2px rgba(0,0,0,.42);
     --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
@@ -146,9 +162,16 @@
   --line-soft:color-mix(in srgb,var(--a-lift) 7%,#282E31);
   --scrim:rgba(0,0,0,.68);
   /* A struck-through line at .55 vanished on a dark ground. */
-  --done-fade:.75;
+  --done-fade:.9;
   --knob:var(--muted);
   --canvas:var(--ground);
+  /* Measured over every category colour: titles at least 8.3:1 on their
+     block, times 6.8:1, finished items 5.8:1 even faded and struck through. */
+  --ev-fill:12%;
+  --ev-label:22%;
+  --ev-time:18%;
+  --ev-time-base:var(--ink-2);
+  --ev-done-mix:0%;
   /* Deeper than light mode: a soft shadow does not register on near-black. */
   --sh-1:0 1px 2px rgba(0,0,0,.42);
   --sh-2:0 8px 24px -12px rgba(0,0,0,.7);
@@ -302,11 +325,16 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 /* Calendar entries share one treatment, the convention every calendar app
    uses: a pale wash of the category colour, a hairline edge a few shades
    deeper, and the label in a dark tone of the same hue rather than plain ink. */
-.tchip,.ev,.mchip{
-  --fill:color-mix(in srgb,var(--c) 10%,var(--tint-base));
+.tchip,.ev,.mchip,.gchip{
+  --fill:color-mix(in srgb,var(--c) var(--ev-fill),var(--tint-base));
   --edge:color-mix(in srgb,var(--c) 55%,var(--tint-base));
-  --label:color-mix(in srgb,var(--c) 58%,var(--ink));
-  --fill-hover:color-mix(in srgb,var(--c) 18%,var(--tint-base));
+  --label:color-mix(in srgb,var(--c) var(--ev-label),var(--ink));
+  --time:color-mix(in srgb,var(--c) var(--ev-time),var(--ev-time-base));
+  /* Light keeps the title colour and lets the fade do the work; dark swaps
+     to the quieter time tone, because fading a light title on a dark block
+     is what made finished items unreadable. */
+  --label-done:color-mix(in srgb,var(--label) var(--ev-done-mix),var(--time));
+  --fill-hover:color-mix(in srgb,var(--c) calc(var(--ev-fill) + 8%),var(--tint-base));
 }
 .tchip{display:flex;align-items:center;gap:6px;padding:2px 5px;border-radius:7px;background:var(--fill);color:var(--label);font-size:11.5px;font-weight:500;text-align:left;width:100%;min-width:0}
 .tchip:hover{background:var(--fill-hover)}
@@ -319,11 +347,11 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .tchip-tick .ic{width:9px;height:9px;stroke:var(--on-accent);stroke-width:3;opacity:0}
 .tchip.done .tchip-tick{background:var(--c);border-color:var(--c)}
 .tchip.done .tchip-tick .ic{opacity:1}
-.tchip.done .tchip-body{text-decoration:line-through}
+.tchip.done .tchip-body{text-decoration:line-through;color:var(--label-done)}
 .tchip.done{opacity:var(--done-fade)}
 /* Overdue takes over the chip's colour, so the icon follows the background
    rather than staying on the category hue. */
-.tchip.over{--fill:var(--danger-soft);--fill-hover:color-mix(in srgb,var(--danger) 18%,var(--tint-base));--edge:color-mix(in srgb,var(--danger) 55%,var(--tint-base));--label:color-mix(in srgb,var(--danger) 58%,var(--ink))}
+.tchip.over{--fill:var(--danger-soft);--fill-hover:color-mix(in srgb,var(--danger) 18%,var(--tint-base));--edge:color-mix(in srgb,var(--danger) 55%,var(--tint-base));--label:color-mix(in srgb,var(--danger) var(--ev-label),var(--ink))}
 .tchip.over .ic{color:var(--danger)}
 .grid-scroll{flex:1;overflow-y:auto;min-height:0}
 /* Pinned inside the scroller, so it shares the grid's content width exactly
@@ -340,7 +368,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .ev{position:absolute;left:3px;right:3px;border-radius:7px;padding:3px 6px;overflow:hidden;background:var(--fill);border-left:2px solid var(--edge);font-size:11px;text-align:left;color:var(--label);min-height:18px}
 .ev:hover{background:var(--fill-hover);z-index:3}
 .ev b{font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
-.ev i{font-style:normal;color:color-mix(in srgb,var(--c) 42%,var(--muted));font-size:10.5px}
+.ev i{font-style:normal;color:var(--time);font-size:10.5px}
 /* Short blocks put the title and time on one line so neither is clipped. */
 .ev.sm{display:flex;align-items:center;gap:5px;padding:1px 6px;line-height:1.35}
 .ev.sm b{font-size:11px;flex:1 1 auto;min-width:0}
@@ -356,7 +384,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
   color:var(--muted);background:var(--surface-3);border-radius:20px;padding:3px 10px}
 .cal-tracked .ic{color:var(--faint)}
 .ev.done{opacity:var(--done-fade)}
-.ev.done b{text-decoration:line-through}
+.ev.done b{text-decoration:line-through;color:var(--label-done)}
 .nowline{position:absolute;left:0;right:0;height:0;border-top:1.6px solid var(--danger);z-index:4;pointer-events:none}
 .nowline::before{content:"";position:absolute;left:-4px;top:-4px;width:7px;height:7px;border-radius:50%;background:var(--danger)}
 
@@ -374,7 +402,7 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .mmore{font-size:10.5px;color:var(--faint);font-weight:600;text-align:left;padding-left:3px}
 .mchip{display:flex;align-items:center;gap:4px;font-size:10.5px;padding:1.5px 5px;border-radius:5px;background:var(--fill);color:var(--label);border-left:2px solid var(--edge);text-align:left;min-width:0}
 .mchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mchip.done{opacity:var(--done-fade);text-decoration:line-through}
+.mchip.done{opacity:var(--done-fade);text-decoration:line-through;color:var(--label-done)}
 
 .overdue{width:296px;border-left:1px solid var(--line);background:var(--surface-2);display:flex;flex-direction:column;min-height:0;transition:width .18s ease}
 .overdue.collapsed{width:46px}
@@ -745,8 +773,7 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
    planner's own routines, and the two should be told apart at a glance. */
 .gev-block{border-left:0;box-shadow:inset 0 0 0 1px var(--edge)}
 .gev-block:hover{background:var(--fill-hover)}
-.gchip{--fill:color-mix(in srgb,var(--c) 16%,var(--tint-base));
-  --label:color-mix(in srgb,var(--c) 58%,var(--ink));
+.gchip{--fill:color-mix(in srgb,var(--c) calc(var(--ev-fill) + 5%),var(--tint-base));
   display:flex;align-items:center;min-width:0;width:100%;padding:2px 7px;border-radius:7px;
   background:var(--fill);color:var(--label);font-size:11.5px;font-weight:600;text-align:left}
 .gchip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
