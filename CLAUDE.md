@@ -128,6 +128,12 @@ because it is on the page once already; showing it twice would make one
 piece of work look like two. Missed routines fold away past `MISS_SHOWN`:
 they are the least actionable thing there, and ten of them buried the rest.
 
+The sidebar carries one number, and only when something is late: overdue
+tasks, on Dashboard, in the danger colour (`navAlert()`). Counts on every
+section were inventory, and a number that is always there stops being seen.
+What is due today is a plan, not an alarm. The badge is a `<b>`, not a
+`<span>`, because the icon-only rail hides every span in a nav button.
+
 The dashboard is the page the planner opens on. Everyone set up before it
 existed has `launch:"calendar"` saved — the old default, not a choice — so
 start-up moves them once; picking a page in Settings sets `launchSet` and is

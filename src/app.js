@@ -262,15 +262,16 @@ const GC={events:[],cals:[],from:"",to:"",busy:false,fetching:false,err:"",statu
 /* ============ rail + topbar ============ */
 const NAV=[{id:"dashboard",name:"Dashboard",icon:"i-dash"},{id:"calendar",name:"Calendar",icon:"i-calendar"},{id:"tasks",name:"Tasks",icon:"i-board"},
  {id:"matrix",name:"Matrix",icon:"i-grid"},{id:"routines",name:"Routines",icon:"i-repeat"},{id:"notes",name:"Notes",icon:"i-note"}];
-function navCount(id){
-  if(id==="dashboard"){const d=todayItems();
-    return d.tasks.filter(isOpen).length+d.routines.filter(r=>!doneR(r,TODAY())).length;}
-  if(id==="calendar"){const o=overdueItems();return o.tasks.length+o.miss.length;}
-  if(id==="tasks")return S.tasks.filter(isOpen).length;
-  if(id==="matrix")return S.tasks.filter(t=>isOpen(t)&&quadOf(t)==="do").length;
-  if(id==="routines")return S.routines.filter(r=>routineOn(r,today())&&!doneR(r,TODAY())).length;
-  if(id==="notes")return S.notes.length;
-  return 0;
+/* The sidebar carries a number only when something is late, and only once,
+   on Dashboard, where "Needs your attention" lives. A count on every section
+   -- open tasks, today's routines, how many notes -- was inventory, and a
+   number that is always there stops being noticed. What is due today is a
+   plan, not an alarm, so it does not count; what has slipped past its date
+   does. */
+function navAlert(id){
+  if(id!=="dashboard")return null;
+  const n=overdueItems().tasks.length;
+  return n?{n:n,label:n+" overdue task"+(n===1?"":"s")}:null;
 }
 /* On a narrow screen the rail is a drawer over the view; on a wide one the
    class is inert because the rail is always in the layout. */
@@ -278,8 +279,12 @@ function closeRail(){document.body.classList.remove("rail-open");}
 
 function renderRail(){
   const bs=el("brandSub");if(bs)bs.textContent="Personal planner";
-  el("nav").innerHTML=NAV.map(n=>{const c=navCount(n.id);
-    return '<button class="nav-btn" data-act="view" data-view="'+n.id+'" aria-current="'+(V.view===n.id)+'" title="'+esc(n.name)+'">'+icon(n.icon,"ic-18")+'<span>'+esc(n.name)+'</span>'+(c?'<span class="count num">'+c+'</span>':'')+'</button>';}).join("");
+  el("nav").innerHTML=NAV.map(n=>{const a=navAlert(n.id);
+    return '<button class="nav-btn" data-act="view" data-view="'+n.id+'" aria-current="'+(V.view===n.id)+'" title="'+esc(n.name+(a?" · "+a.label:""))+'">'+
+      icon(n.icon,"ic-18")+'<span>'+esc(n.name)+'</span>'+
+      /* <b>, not <span>: the icon-only rail hides every span in a nav button,
+         and an alert has to survive that. */
+      (a?'<b class="nav-alert num" aria-label="'+esc(a.label)+'">'+a.n+'</b>':'')+'</button>';}).join("");
   const hid=hiddenCats().length;
   el("railHead").innerHTML='<span class="grow">Categories</span>'+
     (hid?'<button class="txt" data-act="cat-all" title="Show every category">Show all</button>'
@@ -573,8 +578,10 @@ function viewDashboard(){
 
   const o=overdueItems(),ai=noteActionItems();
   const need=o.tasks.length+o.miss.length+ai.length;
-  const attn='<section class="dcard dash-attn"><header class="dcard-h"><h2>Needs your attention</h2>'+
-      (need?'<span class="dcount num">'+need+'</span>':"")+'</header>'+
+  /* No red total here: the sidebar's red number means late, and a total that
+     also counts missed routines and undated notes would say 10 beside its 1.
+     Each group below carries its own count. */
+  const attn='<section class="dcard dash-attn"><header class="dcard-h"><h2>Needs your attention</h2></header>'+
     (!need?'<div class="dclear">'+icon("i-check")+'<p>You’re all caught up. Nothing overdue, nothing missed.</p></div>':
       (o.tasks.length?dashGroup("Overdue tasks",o.tasks.length,o.tasks.map(t=>{const c=cat(t.cat);
         return dashRow({color:c.color,tick:tickBtn(t),open:'data-act="task" data-id="'+t.id+'"',title:t.title,

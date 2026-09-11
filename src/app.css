@@ -216,8 +216,12 @@ h1,h2,h3,h4{margin:0;font-family:var(--fd);font-weight:600;letter-spacing:-.01em
 .nav-btn{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-s);color:var(--ink-2);font-weight:500;text-align:left;width:100%;transition:background .15s,color .15s}
 .nav-btn:hover{background:var(--surface-3)}
 .nav-btn[aria-current="true"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
-.nav-btn .count{margin-left:auto;font-size:11px;font-weight:600;color:var(--faint);background:var(--surface-3);padding:1px 7px;border-radius:20px}
-.nav-btn[aria-current="true"] .count{background:var(--surface);color:var(--accent-2)}
+/* Something is late. Filled in the danger colour so it is the one thing in
+   the sidebar that catches the eye, which only works because nothing else
+   there carries a number. */
+.nav-alert{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:20px;display:inline-grid;place-items:center;
+  background:var(--danger);color:var(--on-accent);font-size:11px;font-weight:700;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--danger) 22%,transparent)}
 .rail-head{display:flex;align-items:center;gap:6px;padding:0 10px 8px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
 .rail-head .grow{flex:1;min-width:0;overflow:hidden;white-space:nowrap}
 .rail-head button{color:var(--faint);display:grid;place-items:center;width:20px;height:20px;border-radius:6px}
@@ -673,8 +677,6 @@ select.inp{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xm
 .dcard-h{display:flex;align-items:center;gap:8px;padding:14px 16px 6px}
 .dcard-h h2{font-size:15px;font-weight:600}
 .dcard-h small{margin-left:auto;font-size:11.5px;color:var(--faint)}
-.dcount{font-size:11px;font-weight:700;padding:1px 7px;border-radius:20px;
-  background:var(--danger-soft);color:var(--danger)}
 .dgroup{padding:6px 8px 10px}
 .dgroup + .dgroup{border-top:1px solid var(--line-soft);padding-top:12px}
 .dgroup h3{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--faint);
@@ -1057,6 +1059,9 @@ input.accent-custom.empty::-webkit-color-swatch{opacity:0}
 
 /* Tablet: the rail collapses to icons, the matrix stacks. */
 @media (max-width:1080px) and (min-width:821px){
+  /* Icons only: the alert pins to the corner of the icon. */
+  .nav-btn{position:relative}
+  .nav-alert{position:absolute;top:2px;right:4px;margin:0;min-width:17px;height:17px;padding:0 4px;font-size:10px}
   .app{grid-template-columns:70px minmax(0,1fr)}
   .brand-name,.brand-sub,.nav-btn span,.cat-row .cname,.rail-head span,.sync span{display:none}
   .nav-btn{justify-content:center}
